@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Nowy moduł — ShoperCenter{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title">Nowy moduł</h1>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label"><span class="label-text">Sklep</span></label>
+          {{ form.shop }}
+        </div>
+        <div>
+          <label class="label"><span class="label-text">Resource</span></label>
+          {{ form.resource }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="label"><span class="label-text">Nazwa modułu</span></label>
+          {{ form.name }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="label"><span class="label-text">Własny path API (opcjonalnie)</span></label>
+          {{ form.api_path_override }}
+          <div class="text-xs opacity-70 mt-1">Jeśli domyślny path nie działa, wpisz np. products, orders…</div>
+        </div>
+      </div>
+      <div class="card-actions justify-end">
+        <a class="btn" href="{% url 'modules:list' %}">Anuluj</a>
+        <button class="btn btn-primary" type="submit">Utwórz</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

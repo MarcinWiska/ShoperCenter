@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Sklep — ShoperCenter{% endblock %}
+{% block content %}
+<div class="max-w-xl mx-auto card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title">{% if object %}Edytuj sklep{% else %}Dodaj sklep{% endif %}</h1>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="form-control">
+        <label class="label"><span class="label-text">Nazwa własna</span></label>
+        {{ form.name }}
+      </div>
+      <div class="form-control">
+        <label class="label"><span class="label-text">Base URL API</span></label>
+        {{ form.base_url }}
+      </div>
+      <div class="form-control">
+        <label class="label"><span class="label-text">Bearer Token</span></label>
+        {{ form.bearer_token }}
+      </div>
+      <div class="card-actions justify-end">
+        <a class="btn" href="{% url 'shops:list' %}">Anuluj</a>
+        <button class="btn btn-primary" type="submit">Zapisz</button>
+      </div>
+    </form>
+  </div>
+  </div>
+{% endblock %}
+

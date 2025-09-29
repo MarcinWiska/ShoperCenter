@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Moduły — ShoperCenter{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-2xl font-semibold">Twoje moduły</h1>
+  <a class="btn btn-primary" href="{% url 'modules:add' %}">Nowy moduł</a>
+</div>
+
+<div class="overflow-x-auto">
+  <table class="table table-zebra w-full">
+    <thead>
+      <tr>
+        <th>Nazwa</th>
+        <th>Sklep</th>
+        <th>Resource</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in modules %}
+      <tr>
+        <td>{{ m.name }}</td>
+        <td>{{ m.shop.name }}</td>
+        <td>{{ m.resource }}</td>
+        <td class="space-x-2">
+          <a class="btn btn-xs" href="{% url 'modules:detail' m.pk %}">Otwórz</a>
+          <a class="btn btn-xs" href="{% url 'modules:configure' m.pk %}">Atrybuty</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">Brak modułów. Dodaj nowy.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+

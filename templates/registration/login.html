@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Logowanie — ShoperCenter{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title">Zaloguj się</h1>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="form-control">
+        <label class="label"><span class="label-text">Nazwa użytkownika</span></label>
+        <input type="text" name="username" required class="input input-bordered" id="id_username" />
+      </div>
+      <div class="form-control">
+        <label class="label"><span class="label-text">Hasło</span></label>
+        <input type="password" name="password" required class="input input-bordered" id="id_password" />
+      </div>
+      <div class="card-actions justify-end">
+        <button class="btn btn-primary" type="submit">Zaloguj</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

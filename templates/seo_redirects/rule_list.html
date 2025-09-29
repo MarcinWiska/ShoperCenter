@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Przekierowania SEO — ShoperCenter{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-2xl font-semibold">Przekierowania SEO</h1>
+  <a class="btn btn-primary" href="{% url 'seo_redirects:add' %}">Nowe przekierowanie</a>
+</div>
+
+<div class="overflow-x-auto">
+  <table class="table table-zebra w-full">
+    <thead>
+      <tr>
+        <th>Sklep</th>
+        <th>Typ</th>
+        <th>Źródło</th>
+        <th>Cel</th>
+        <th>Kod</th>
+        
+        <th>Sync</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rules %}
+      <tr>
+        <td>{{ r.shop.name }}</td>
+        <td>{{ r.get_rule_type_display }}</td>
+        <td>
+          {% if r.rule_type == 'url_to_url' %}
+            <code class="text-xs">{{ r.source_url }}</code>
+          {% elif r.rule_type == 'product_to_url' %}
+            Product ID: {{ r.product_id }}
+          {% elif r.rule_type == 'category_to_url' %}
+            Category ID: {{ r.category_id }}
+          {% endif %}
+        </td>
+        <td><code class="text-xs">{{ r.target_url }}</code></td>
+        <td>{{ r.status_code }}</td>
+        <td>
+          {% if r.remote_id %}
+            <div class="text-xs">ID: {{ r.remote_id }}</div>
+          {% endif %}
+          <div class="text-xs opacity-70">{{ r.last_sync_status }}</div>
+        </td>
+        <td class="space-x-1">
+          <a class="btn btn-xs" href="{% url 'seo_redirects:edit' r.pk %}">Edytuj</a>
+          <a class="btn btn-xs btn-error" href="{% url 'seo_redirects:delete' r.pk %}">Usuń</a>
+          <a class="btn btn-xs btn-primary" href="{% url 'seo_redirects:sync' r.pk %}">Sync</a>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8">Brak przekierowań. Dodaj pierwsze.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="mt-4">
+  <h2 class="text-lg font-semibold mb-2">Pobierz istniejące przekierowania z API</h2>
+  <div class="flex flex-wrap gap-2">
+    {% for s in shops %}
+      <a class="btn btn-sm" href="{% url 'seo_redirects:pull' s.id %}">Pobierz: {{ s.name }}</a>
+    {% empty %}
+      <div class="opacity-70">Brak sklepów przypisanych do konta.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

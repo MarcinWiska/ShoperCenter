@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Atrybuty modułu — ShoperCenter{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-2xl font-semibold">Atrybuty: {{ module.name }}</h1>
+  <a class="btn" href="{% url 'modules:list' %}">Wróć</a>
+  </div>
+
+{% if error %}
+  <div class="alert alert-error mb-2">{{ error }}</div>
+  {% if api_hint_urls %}
+    <div class="alert alert-info mb-4">
+      Próbowane adresy (sprawdź w Postmanie):
+      <ul class="list-disc ml-6">
+        {% for u in api_hint_urls %}
+          <li><code class="text-xs break-all">{{ u }}</code></li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+{% endif %}
+
+<label for="fields-modal" class="btn btn-primary">Wybierz atrybuty</label>
+<input type="checkbox" id="fields-modal" class="modal-toggle" checked />
+<div class="modal">
+  <div class="modal-box max-w-4xl">
+    <h3 class="font-bold text-lg mb-4">Wybierz atrybuty do wyświetlania</h3>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <div class="overflow-y-auto max-h-[60vh]">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th>Widoczne</th>
+              <th>Klucz</th>
+              <th>Nazwa kolumny</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for key in fields %}
+            <tr>
+              <td>
+                <input type="checkbox" name="fields" value="{{ key }}" class="checkbox"
+                  {% if key in selected_keys %}checked{% endif %} />
+              </td>
+              <td><code class="text-xs">{{ key }}</code></td>
+              <td>
+                <input type="text" name="label__{{ key }}" value="{{ key }}" class="input input-bordered w-full" />
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">Brak atrybutów do wyświetlenia.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-action">
+        <label for="fields-modal" class="btn">Anuluj</label>
+        <button class="btn btn-primary" type="submit">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

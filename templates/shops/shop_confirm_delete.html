@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Usuń sklep — ShoperCenter{% endblock %}
+{% block content %}
+<div class="max-w-xl mx-auto card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title">Usuń sklep</h1>
+    <p>Czy na pewno chcesz usunąć sklep "{{ object.name }}"?</p>
+    <form method="post" class="mt-4">
+      {% csrf_token %}
+      <div class="card-actions justify-end">
+        <a class="btn" href="{% url 'shops:list' %}">Anuluj</a>
+        <button class="btn btn-error" type="submit">Usuń</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

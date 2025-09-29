@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Przekierowanie SEO — ShoperCenter{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title">{% if object %}Edytuj{% else %}Nowe{% endif %} przekierowanie</h1>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label"><span class="label-text">Sklep</span></label>
+          {{ form.shop }}
+        </div>
+        <div>
+          <label class="label"><span class="label-text">Typ</span></label>
+          {{ form.rule_type }}
+        </div>
+        <div class="md:col-span-2">
+          <div class="alert alert-info text-sm">
+            URL→URL: wypełnij pola „Źródłowy URL” i „Docelowy URL”.
+            Product/Category→URL: podaj odpowiednie ID oraz „Źródłowy URL” (stary adres), a „Docelowy URL” zostanie pobrany automatycznie podczas synchronizacji – możesz go nadpisać, jeśli chcesz wymusić inny adres.
+          </div>
+        </div>
+        <div class="md:col-span-2" data-field="source">
+          <label class="label"><span class="label-text">Źródłowy URL (dla URL→URL lub nadpisanie)</span></label>
+          {{ form.source_url }}
+        </div>
+        <div data-field="product">
+          <label class="label"><span class="label-text">Product ID</span></label>
+          {{ form.product_id }}
+        </div>
+        <div data-field="category">
+          <label class="label"><span class="label-text">Category ID</span></label>
+          {{ form.category_id }}
+        </div>
+        <div class="md:col-span-2 transition-opacity" data-field="target">
+          <label class="label"><span class="label-text">Docelowy URL <span class="text-xs font-normal opacity-60" data-target-hint></span></span></label>
+          {{ form.target_url }}
+        </div>
+        <div>
+          <label class="label"><span class="label-text">Kod</span></label>
+          {{ form.status_code }}
+        </div>
+      </div>
+      <div class="card-actions justify-end">
+        <a class="btn" href="{% url 'seo_redirects:list' %}">Anuluj</a>
+        <button class="btn btn-primary" type="submit">Zapisz</button>
+      </div>
+    </form>
+    <script>
+      (function() {
+        const typeSelect = document.getElementById('id_rule_type');
+        if (!typeSelect) {
+          return;
+        }
+        const productField = document.querySelector('[data-field="product"]');
+        const categoryField = document.querySelector('[data-field="category"]');
+        const targetField = document.querySelector('[data-field="target"]');
+        const targetInput = document.getElementById('id_target_url');
+        const targetHint = document.querySelector('[data-target-hint]');
+
+        function updateFields() {
+          const value = typeSelect.value;
+          if (productField) {
+            productField.classList.toggle('hidden', value !== 'product_to_url');
+          }
+          if (categoryField) {
+            categoryField.classList.toggle('hidden', value !== 'category_to_url');
+          }
+          if (targetField) {
+            const isUrlToUrl = value === 'url_to_url';
+            targetField.classList.toggle('opacity-70', !isUrlToUrl);
+            if (targetHint) {
+              targetHint.textContent = isUrlToUrl ? '– wymagany (ścieżka w sklepie)' : '– opcjonalny (pobierzemy z Shopera)';
+            }
+          }
+          if (targetInput) {
+            targetInput.required = value === 'url_to_url';
+          }
+        }
+
+        typeSelect.addEventListener('change', updateFields);
+        updateFields();
+      })();
+    </script>
+  </div>
+</div>
+{% endblock %}

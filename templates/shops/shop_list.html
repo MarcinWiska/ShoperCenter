@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Twoje sklepy — ShoperCenter{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-2xl font-semibold">Twoje sklepy</h1>
+  <a class="btn btn-primary" href="{% url 'shops:add' %}">Dodaj sklep</a>
+  </div>
+
+<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+  {% for shop in shops %}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">{{ shop.name }}</h2>
+        <p class="text-sm text-base-content/70 break-all">{{ shop.base_url }}</p>
+        <div class="card-actions justify-end">
+          <a class="btn btn-sm" href="{% url 'shops:test' shop.pk %}">Testuj</a>
+          <a class="btn btn-sm" href="{% url 'shops:edit' shop.pk %}">Edytuj</a>
+          <a class="btn btn-sm btn-error" href="{% url 'shops:delete' shop.pk %}">Usuń</a>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="col-span-full">
+      <div class="alert">Brak sklepów. Dodaj pierwszy.</div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

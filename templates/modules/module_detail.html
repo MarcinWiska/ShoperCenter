@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load module_extras %}
+{% block title %}Moduł — ShoperCenter{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <div>
+    <h1 class="text-2xl font-semibold">{{ module.name }}</h1>
+    <div class="text-sm opacity-70">{{ module.shop.name }} / {{ module.resource }}</div>
+  </div>
+  <div class="space-x-2">
+    <a class="btn" href="{% url 'modules:configure' module.pk %}">Atrybuty</a>
+    <a class="btn" href="{% url 'modules:list' %}">Wróć</a>
+  </div>
+</div>
+
+<div class="overflow-x-auto">
+  <table class="table table-zebra w-full">
+    <thead>
+      <tr>
+        {% for col in columns %}
+          <th>{{ col.label }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          {% for col in columns %}
+            <td>{{ row|dotget:col.key }}</td>
+          {% endfor %}
+        </tr>
+      {% empty %}
+        <tr><td colspan="{{ columns|length }}">Brak danych do wyświetlenia.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
