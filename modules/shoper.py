@@ -21,25 +21,47 @@ RESOURCE_TO_PATH = {
 def build_rest_roots(base_url: str) -> List[str]:
     """Generate likely REST roots (end with '/'). Prefer '/webapi/rest/'."""
     u = base_url.rstrip('/')
-    candidates: List[str] = []
-    # Exact provided
-    if u.endswith('/webapi/rest'):
-        candidates.append(u + '/')
-    if u.endswith('/webapi'):
-        candidates.append(u + '/rest/')
-    if u.endswith('/rest'):
-        candidates.append(u + '/')
-    # Common defaults
-    candidates.append(u + '/webapi/rest/')
-    candidates.append(u + '/rest/')
-    # Deduplicate
+    lowered = u.lower()
     seen = set()
-    uniq: List[str] = []
-    for c in candidates:
-        if c not in seen:
-            uniq.append(c)
-            seen.add(c)
-    return uniq
+    roots: List[str] = []
+
+    def add(candidate: str) -> None:
+        if candidate not in seen:
+            roots.append(candidate)
+            seen.add(candidate)
+
+    normalized_base = u + '/'
+
+    # Prefer explicit API roots first
+    if lowered.endswith('/webapi/rest'):
+        add(normalized_base)
+        add(u.rsplit('/', 1)[0] + '/')  # .../webapi/
+    elif lowered.endswith('/webapi'):
+        add(u + '/rest/')
+        add(u + '/')
+    elif lowered.endswith('/api/rest'):
+        add(normalized_base)
+        add(u.rsplit('/', 1)[0] + '/')  # .../api/
+    elif lowered.endswith('/api'):
+        add(u + '/rest/')
+        add(u + '/')
+    elif lowered.endswith('/rest'):
+        add(normalized_base)
+
+    # Generic guesses when base_url does not already include API segment
+    if '/webapi/' not in lowered and not lowered.endswith('/webapi') and '/webapi/rest' not in lowered:
+        add(u + '/webapi/rest/')
+        add(u + '/webapi/')
+    if '/api/' not in lowered and not lowered.endswith('/api') and '/api/rest' not in lowered:
+        add(u + '/api/rest/')
+        add(u + '/api/')
+    if not lowered.endswith('/rest') and '/rest/' not in lowered:
+        add(u + '/rest/')
+
+    # Finally, fallback to the provided base itself
+    add(normalized_base)
+
+    return roots
 
 
 def build_rest_url(base_url: str, path: str) -> str:

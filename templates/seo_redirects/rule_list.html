@@ -26,15 +26,28 @@
         <td>{{ r.shop.name }}</td>
         <td>{{ r.get_rule_type_display }}</td>
         <td>
-          {% if r.rule_type == 'url_to_url' %}
-            <code class="text-xs">{{ r.source_url }}</code>
-          {% elif r.rule_type == 'product_to_url' %}
+          {% if r.source_full_url %}
+            <a class="link link-primary text-xs break-all" href="{{ r.source_full_url }}" target="_blank" rel="noopener">{{ r.source_full_url }}</a>
+          {% elif r.rule_type == 'product_to_url' and r.product_id %}
             Product ID: {{ r.product_id }}
-          {% elif r.rule_type == 'category_to_url' %}
+          {% elif r.rule_type == 'category_to_url' and r.category_id %}
             Category ID: {{ r.category_id }}
+          {% else %}
+            <span class="text-xs opacity-70">Brak danych</span>
+          {% endif %}
+          {% if r.rule_type == 'product_to_url' and r.product_id %}
+            <div class="text-xs opacity-70">Product ID: {{ r.product_id }}</div>
+          {% elif r.rule_type == 'category_to_url' and r.category_id %}
+            <div class="text-xs opacity-70">Category ID: {{ r.category_id }}</div>
           {% endif %}
         </td>
-        <td><code class="text-xs">{{ r.target_url }}</code></td>
+        <td>
+          {% if r.target_full_url %}
+            <a class="link text-xs break-all" href="{{ r.target_full_url }}" target="_blank" rel="noopener">{{ r.target_full_url }}</a>
+          {% else %}
+            <code class="text-xs">{{ r.target_url }}</code>
+          {% endif %}
+        </td>
         <td>{{ r.status_code }}</td>
         <td>
           {% if r.remote_id %}

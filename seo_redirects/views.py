@@ -1,4 +1,3 @@
-from datetime import datetime
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -9,7 +8,8 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from .models import RedirectRule
 from .forms import RedirectRuleForm
 from .helpers import guess_product_path, guess_category_path
-from .shoper_redirects import post_redirect, build_payloads, list_redirects, parse_remote_redirect, was_redirect_created, _norm_path
+from .services import sync_redirect_rule
+from .shoper_redirects import list_redirects, parse_remote_redirect, _norm_path
 
 
 class RedirectRuleListView(LoginRequiredMixin, ListView):
@@ -41,7 +41,18 @@ class RedirectRuleCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.owner = self.request.user
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        self._sync_and_notify()
+        return response
+
+    def _sync_and_notify(self):
+        result = sync_redirect_rule(self.object)
+        if result.level == 'success':
+            messages.success(self.request, result.message)
+        elif result.level == 'warning':
+            messages.warning(self.request, result.message)
+        else:
+            messages.error(self.request, result.message)
 
 
 class RedirectRuleUpdateView(LoginRequiredMixin, UpdateView):
@@ -58,6 +69,20 @@ class RedirectRuleUpdateView(LoginRequiredMixin, UpdateView):
         kwargs['user'] = self.request.user
         return kwargs
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        self._sync_and_notify()
+        return response
+
+    def _sync_and_notify(self):
+        result = sync_redirect_rule(self.object)
+        if result.level == 'success':
+            messages.success(self.request, result.message)
+        elif result.level == 'warning':
+            messages.warning(self.request, result.message)
+        else:
+            messages.error(self.request, result.message)
+
 
 class RedirectRuleDeleteView(LoginRequiredMixin, DeleteView):
     model = RedirectRule
@@ -71,79 +96,13 @@ class RedirectRuleDeleteView(LoginRequiredMixin, DeleteView):
 @login_required
 def sync_rule(request, pk):
     rule = get_object_or_404(RedirectRule, pk=pk, owner=request.user)
-    shop = rule.shop
-
-    # Determine source URL (prefer user-provided value, fallback to API guesses)
-    source = (rule.source_url or '').strip()
-    if not source:
-        if rule.rule_type == RedirectRule.RuleType.PRODUCT_TO_URL and rule.product_id:
-            source = guess_product_path(shop, rule.product_id)
-        elif rule.rule_type == RedirectRule.RuleType.CATEGORY_TO_URL and rule.category_id:
-            source = guess_category_path(shop, rule.category_id)
-    source = _norm_path(source)
-
-    if not source:
-        messages.error(request, 'Nie można ustalić Źródłowego URL — uzupełnij pole Źródłowy URL lub ID produktu/kategorii.')
-        return redirect('seo_redirects:list')
-
-    # Determine target URL based on rule type
-    target = (rule.target_url or '').strip()
-    if rule.rule_type == RedirectRule.RuleType.PRODUCT_TO_URL:
-        if not rule.product_id:
-            messages.error(request, 'Dla reguły Product ID → URL wymagane jest ID produktu.')
-            return redirect('seo_redirects:list')
-        target = guess_product_path(shop, rule.product_id)
-    elif rule.rule_type == RedirectRule.RuleType.CATEGORY_TO_URL:
-        if not rule.category_id:
-            messages.error(request, 'Dla reguły Category ID → URL wymagane jest ID kategorii.')
-            return redirect('seo_redirects:list')
-        target = guess_category_path(shop, rule.category_id)
-
-    target = _norm_path(target)
-
-    if not target:
-        messages.error(request, 'Nie można ustalić Docelowego URL — uzupełnij pole Docelowy URL lub ID produktu/kategorii.')
-        return redirect('seo_redirects:list')
-
-    payloads = build_payloads(source, target, rule.status_code)
-    ok, msg, js = post_redirect(shop.base_url, shop.bearer_token, payloads)
-    dbg_url = None
-    if isinstance(js, dict):
-        dbg = js.get('_debug')
-        if isinstance(dbg, dict):
-            dbg_url = dbg.get('url')
-    rule.last_sync_status = f"{msg}{' @ ' + dbg_url if dbg_url else ''}"
-    rule.last_sync_at = datetime.utcnow()
-    fields_to_update = ['last_sync_status', 'last_sync_at']
-    if ok and isinstance(js, dict):
-        rid = js.get('id') or js.get('redirect_id') or js.get('uuid')
-        if rid:
-            rid = str(rid)
-            if rule.remote_id != rid:
-                rule.remote_id = rid
-                fields_to_update.append('remote_id')
-
-    # Persist normalized paths when we computed them
-    if source and rule.source_url != source:
-        rule.source_url = source
-        fields_to_update.append('source_url')
-    if target and rule.target_url != target:
-        rule.target_url = target
-        fields_to_update.append('target_url')
-
-    rule.save(update_fields=list(dict.fromkeys(fields_to_update)))
-
-    if ok:
-        # verify existence
-        exists, found = was_redirect_created(shop.base_url, shop.bearer_token, source, target)
-        if exists:
-            messages.success(request, f'Zsynchronizowano przekierowanie. {msg}')
-        else:
-            dbg = js.get('_debug') if isinstance(js, dict) else None
-            where = f" @ {dbg.get('url')}" if isinstance(dbg, dict) and dbg.get('url') else ''
-            messages.warning(request, f'API zwróciło {msg}{where}, ale nie znaleziono przekierowania na liście. Sprawdź wymagany format w swojej instancji Shopera.')
+    result = sync_redirect_rule(rule)
+    if result.level == 'success':
+        messages.success(request, result.message)
+    elif result.level == 'warning':
+        messages.warning(request, result.message)
     else:
-        messages.error(request, f'Błąd synchronizacji: {msg}')
+        messages.error(request, result.message)
     return redirect('seo_redirects:list')
 
 

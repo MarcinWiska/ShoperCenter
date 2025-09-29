@@ -49,3 +49,14 @@ class RedirectRule(models.Model):
     def __str__(self):
         return f"{self.shop.name}: {self.rule_type} -> {self.target_url}"
 
+    @property
+    def source_full_url(self) -> str:
+        if not self.source_url:
+            return ''
+        return self.shop.build_storefront_url(self.source_url)
+
+    @property
+    def target_full_url(self) -> str:
+        if not self.target_url:
+            return ''
+        return self.shop.build_storefront_url(self.target_url)

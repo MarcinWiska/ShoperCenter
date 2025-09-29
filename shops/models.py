@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 from django.db import models
 from django.contrib.auth import get_user_model
 
@@ -17,5 +19,20 @@ class Shop(models.Model):
 
     def __str__(self):
         return self.name
+
+    def storefront_base(self) -> str:
+        url = self.base_url.rstrip('/')
+        lowered = url.lower()
+        for suffix in ('/webapi/rest', '/webapi', '/rest'):
+            if lowered.endswith(suffix):
+                url = url[:-len(suffix)]
+                break
+        return url.rstrip('/')
+
+    def build_storefront_url(self, path: str) -> str:
+        base = self.storefront_base() or self.base_url.rstrip('/')
+        if not path:
+            return base
+        return urljoin(base + '/', path.lstrip('/'))
 
 # Create your models here.

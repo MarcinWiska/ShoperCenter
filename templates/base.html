@@ -6,32 +6,289 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}ShoperCenter{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Custom styles for sidebar */
+    .sidebar-fixed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 16rem;
+      height: 100vh;
+      z-index: 1000;
+    }
+    
+    .main-content-shifted {
+      margin-left: 16rem;
+    }
+    
+    .sidebar-link:hover {
+      background: rgba(31, 41, 55, 0.8);
+    }
+    
+    .submenu-link:hover {
+      color: #ef4444;
+    }
+    
+    /* Scrollbar styling */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(31, 41, 55, 0.3);
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(239, 68, 68, 0.5);
+      border-radius: 2px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(239, 68, 68, 0.7);
+    }
+  </style>
 </head>
-<body class="min-h-screen bg-base-200" data-theme="shoperdark">
-  <nav class="navbar bg-base-100 shadow">
-    <div class="flex-1">
-      <a href="/" class="btn btn-ghost text-xl">ShoperCenter</a>
-    </div>
-    <div class="flex-none">
-      {% if user.is_authenticated %}
-      <a class="btn btn-ghost" href="/">Sklepy</a>
-      <a class="btn btn-ghost" href="/modules/">Moduły</a>
-      <a class="btn btn-ghost" href="/redirects/">Przekierowania</a>
-      <a class="btn btn-primary btn-sm mr-2" href="/modules/add/">Nowy moduł</a>
-      <span class="mr-2">{{ user.username }}</span>
-      <a class="btn btn-sm" href="{% url 'logout' %}">Wyloguj</a>
-      {% endif %}
-    </div>
-  </nav>
-  <main class="container mx-auto p-4">
-    {% if messages %}
-      <div class="space-y-2">
-        {% for message in messages %}
-          <div class="alert alert-info">{{ message }}</div>
-        {% endfor %}
+<body class="bg-gray-950 text-white min-h-screen">`
+  
+  <!-- Fixed Sidebar -->
+  <div class="sidebar-fixed bg-gray-900 border-r border-gray-800 shadow-2xl custom-scrollbar overflow-y-auto">
+    <div class="flex flex-col h-full">
+      
+      <!-- Logo Section -->
+      <div class="p-6 border-b border-gray-800">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-store text-white text-lg"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-white">ShoperCenter</h1>
+            <p class="text-xs text-gray-400">Panel zarządzania</p>
+          </div>
+        </div>
       </div>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+
+      <!-- User Info -->
+      {% if user.is_authenticated %}
+      <div class="p-4 border-b border-gray-800">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+            <i class="fas fa-user text-white text-sm"></i>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-white">{{ user.username }}</p>
+            <p class="text-xs text-gray-400">Administrator</p>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Navigation Menu -->
+      <nav class="flex-1 p-4">
+        <ul class="space-y-2">
+          
+          <!-- Dashboard -->
+          <li>
+            <a href="/" class="sidebar-link group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-800">
+              <i class="fas fa-home w-5 h-5 mr-3 text-gray-400 group-hover:text-red-400"></i>
+              Dashboard
+            </a>
+          </li>
+
+          <!-- Sklepy -->
+          <li>
+            <div class="collapsible-menu">
+              <button onclick="toggleMenu('shops-menu')" class="sidebar-link group flex items-center justify-between w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-800">
+                <div class="flex items-center">
+                  <i class="fas fa-shopping-bag w-5 h-5 mr-3 text-gray-400 group-hover:text-red-400"></i>
+                  Sklepy
+                </div>
+                <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="shops-menu-icon"></i>
+              </button>
+              <ul class="submenu mt-1 ml-8 space-y-1 hidden" id="shops-menu">
+                <li><a href="/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Lista sklepów</a></li>
+                <li><a href="/shops/add/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Dodaj sklep</a></li>
+              </ul>
+            </div>
+          </li>
+
+          <!-- Moduły -->
+          <li>
+            <div class="collapsible-menu">
+              <button onclick="toggleMenu('modules-menu')" class="sidebar-link group flex items-center justify-between w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-800">
+                <div class="flex items-center">
+                  <i class="fas fa-puzzle-piece w-5 h-5 mr-3 text-gray-400 group-hover:text-red-400"></i>
+                  Moduły
+                </div>
+                <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="modules-menu-icon"></i>
+              </button>
+              <ul class="submenu mt-1 ml-8 space-y-1 hidden" id="modules-menu">
+                <li><a href="/modules/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Lista modułów</a></li>
+                <li><a href="/modules/add/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Nowy moduł</a></li>
+                <li><a href="/modules/settings/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Ustawienia</a></li>
+              </ul>
+            </div>
+          </li>
+
+          <!-- SEO Przekierowania -->
+          <li>
+            <div class="collapsible-menu">
+              <button onclick="toggleMenu('seo-menu')" class="sidebar-link group flex items-center justify-between w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-800">
+                <div class="flex items-center">
+                  <i class="fas fa-exchange-alt w-5 h-5 mr-3 text-gray-400 group-hover:text-red-400"></i>
+                  SEO
+                </div>
+                <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="seo-menu-icon"></i>
+              </button>
+              <ul class="submenu mt-1 ml-8 space-y-1 hidden" id="seo-menu">
+                <li><a href="/redirects/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Przekierowania</a></li>
+                <li><a href="/redirects/add/" class="submenu-link block px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-colors">Nowe przekierowanie</a></li>
+              </ul>
+            </div>
+          </li>
+
+        </ul>
+      </nav>
+
+      <!-- Bottom Section -->
+      {% if user.is_authenticated %}
+      <div class="p-4 border-t border-gray-800">
+        <a href="{% url 'logout' %}" class="sidebar-link group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 text-gray-400 hover:text-red-400 hover:bg-gray-800">
+          <i class="fas fa-sign-out-alt w-5 h-5 mr-3"></i>
+          Wyloguj się
+        </a>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="main-content-shifted">
+    
+    <!-- Top Header -->
+    <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 sticky top-0 z-50">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-white">{% block page_title %}Dashboard{% endblock %}</h2>
+          <p class="text-sm text-gray-400">{% block page_subtitle %}Zarządzaj swoimi sklepami i modułami{% endblock %}</p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <!-- Quick Actions -->
+          <a href="/modules/add/" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center">
+            <i class="fas fa-plus mr-2"></i>
+            Nowy moduł
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="min-h-screen bg-gray-950">
+      <div class="p-6">
+        
+        <!-- Messages -->
+        {% if messages %}
+          <div class="mb-6 space-y-3">
+            {% for message in messages %}
+              <div class="border-l-4 {% if message.tags == 'error' %}border-red-500 bg-red-900 bg-opacity-20 text-red-300{% elif message.tags == 'success' %}border-green-500 bg-green-900 bg-opacity-20 text-green-300{% elif message.tags == 'warning' %}border-yellow-500 bg-yellow-900 bg-opacity-20 text-yellow-300{% else %}border-blue-500 bg-blue-900 bg-opacity-20 text-blue-300{% endif %} p-4 rounded-r-lg">
+                <div class="flex items-center">
+                  <i class="{% if message.tags == 'error' %}fas fa-exclamation-triangle{% elif message.tags == 'success' %}fas fa-check-circle{% elif message.tags == 'warning' %}fas fa-exclamation-circle{% else %}fas fa-info-circle{% endif %} mr-3"></i>
+                  {{ message }}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <!-- Page Content -->
+        <div class="content-wrapper">
+          {% block content %}
+          <!-- Default Dashboard Content -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            
+            <!-- Quick Stats Cards -->
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <i class="fas fa-store text-red-400 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                  <p class="text-sm font-medium text-gray-400">Aktywne sklepy</p>
+                  <p class="text-2xl font-semibold text-white">12</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <i class="fas fa-puzzle-piece text-red-400 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                  <p class="text-sm font-medium text-gray-400">Zainstalowane moduły</p>
+                  <p class="text-2xl font-semibold text-white">8</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <i class="fas fa-exchange-alt text-red-400 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                  <p class="text-sm font-medium text-gray-400">Przekierowania</p>
+                  <p class="text-2xl font-semibold text-white">156</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          {% endblock %}
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- JavaScript for Sidebar -->
+  <script>
+    function toggleMenu(menuId) {
+      const menu = document.getElementById(menuId);
+      const icon = document.getElementById(menuId + '-icon');
+      
+      if (menu.classList.contains('hidden')) {
+        menu.classList.remove('hidden');
+        icon.style.transform = 'rotate(180deg)';
+      } else {
+        menu.classList.add('hidden');
+        icon.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    // Auto-expand current menu based on current URL
+    document.addEventListener('DOMContentLoaded', function() {
+      const currentPath = window.location.pathname;
+      
+      if (currentPath.includes('/modules/')) {
+        toggleMenu('modules-menu');
+      } else if (currentPath.includes('/redirects/')) {
+        toggleMenu('seo-menu');
+      } else if (currentPath.includes('/shops/')) {
+        toggleMenu('shops-menu');
+      }
+      
+      // Highlight active menu item
+      const links = document.querySelectorAll('.sidebar-link, .submenu-link');
+      links.forEach(link => {
+        if (link.getAttribute('href') === currentPath) {
+          link.classList.add('text-red-400', 'bg-gray-800');
+        }
+      });
+    });
+  </script>
+
 </body>
 </html>
