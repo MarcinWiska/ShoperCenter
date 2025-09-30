@@ -581,7 +581,7 @@ def module_data_json(request: HttpRequest, pk: int):
         rec = get_recommended_product_fields()
         columns_cfg = [{'key': f['key'], 'label': f.get('label', f['key'])} for f in rec]
 
-    rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path, limit=limit) if api_path else []
+    rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path) if api_path else []
 
     # Try to detect item_id per row
     id_keys = ['product_id', 'id', 'product.id', 'product.product_id', 'productId', 'productID', 'id_product']
@@ -919,7 +919,10 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
         return JsonResponse({'ok': False, 'error': f'Brak wymaganych pól do duplikacji: {", ".join(required_errors)}'}, status=400)
 
     def build_code(i: int) -> str:
-        idx = f"-{index_start + i}" if add_index else ''
+        idx = ''
+        if add_index:
+            idx = f"-{index_start + i}"
+        # If original has no code, fallback to name-based slugish code
         base = base_code or (name_pl.replace(' ', '-').lower()[:16] or 'prod')
         return f"{code_prefix}{base}{code_suffix}{idx}"
 
@@ -1002,28 +1005,23 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
                 safe_copy_key(payload, k, val)
 
         # Try create; if code conflict occurs, auto-bump code with incremental suffix
-        # Attempt create; if code conflict, try next numeric indices monotonically
         ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
         if not ok and isinstance(msg, str):
             lower = msg.lower()
-            conflict = ('code' in lower and ('istnieje' in lower or 'exist' in lower)) or ('już' in lower and 'istnieje' in lower)
+            conflict = ('code' in lower and ('istnieje' in lower or 'exist' in lower)) or 'już istnieje' in lower
             if conflict:
-                # Start trying next indices, preserving prefix/base/suffix and numeric tail
-                attempts = 0
-                # Derive current index used for this copy
-                current_idx = (index_start + copy_idx) if add_index else 0
-                next_idx = current_idx + 1 if current_idx else 1
-                while attempts < 100 and not ok:
-                    candidate = f"{code_prefix}{(base_code or (name_pl.replace(' ', '-').lower()[:16] or 'prod'))}{code_suffix}{('-' + str(next_idx)) if add_index or next_idx else ''}"
-                    payload['code'] = candidate
+                bumped = False
+                for bump_idx in range(1, 15):
+                    payload['code'] = f"{new_code}-{bump_idx+1}"
                     ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
-                    attempts += 1
-                    next_idx += 1
-                if not ok:
-                    # As a last resort add a random suffix
+                    if ok:
+                        bumped = True
+                        break
+                if not bumped:
+                    # Try a random short suffix to avoid collisions
                     import random, string
                     suffix = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(4))
-                    payload['code'] = f"{code_prefix}{(base_code or (name_pl.replace(' ', '-').lower()[:16] or 'prod'))}{code_suffix}-{suffix}"
+                    payload['code'] = f"{new_code}-{suffix}"
                     ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
 
         if ok:

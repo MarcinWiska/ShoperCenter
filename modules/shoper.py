@@ -121,21 +121,11 @@ def create_product(base_url: str, token: str, payload: Dict[str, Any]) -> Tuple[
                     pass
                 return True, "Produkt utworzony", new_id
 
-            # Parse error (prefer descriptive message fields)
+            # Parse error
             try:
                 data = resp.json()
                 if isinstance(data, dict):
-                    # Many Shoper errors include 'error_description' with human-readable detail
-                    if 'error_description' in data and data['error_description']:
-                        error_msg = str(data['error_description'])
-                    elif 'message' in data and data['message']:
-                        error_msg = str(data['message'])
-                    elif 'errors' in data and isinstance(data['errors'], (dict, list)):
-                        error_msg = str(data['errors'])
-                    elif 'error' in data and data['error']:
-                        error_msg = str(data['error'])
-                    else:
-                        error_msg = str(data)
+                    error_msg = data.get('error', data.get('message', data.get('errors', str(data))))
                 else:
                     error_msg = str(data)
             except Exception:
@@ -805,12 +795,6 @@ def fetch_rows(base_url: str, token: str, path: str, limit: int = 50) -> List[Di
     data: Optional[Any] = None
     for root in build_rest_roots(base_url):
         candidates = [
-            # Prefer newest-first using 'sort' (works on your instance)
-            urljoin(root, p) + f'?limit={limit}&sort=product_id:desc',
-            urljoin(root, p + '/') + f'?limit={limit}&sort=product_id:desc',
-            urljoin(root, p) + f'?limit={limit}&sort=-product_id',
-            urljoin(root, p + '/') + f'?limit={limit}&sort=-product_id',
-            # Fallbacks without explicit sort
             urljoin(root, p) + f'?limit={limit}',
             urljoin(root, p + '/') + f'?limit={limit}',
             urljoin(root, p),
