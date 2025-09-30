@@ -568,12 +568,14 @@ def module_data_json(request: HttpRequest, pk: int):
     module = get_object_or_404(Module, pk=pk, owner=request.user)
     api_path = resolve_path(module.resource, module.api_path_override)
 
-    # Limit rows
+    # Limit rows - allow fetching all products (0 = no limit)
     try:
-        limit = int(request.GET.get('limit') or 200)
+        limit = int(request.GET.get('limit') or 0)
     except Exception:
-        limit = 200
-    limit = max(1, min(limit, 500))
+        limit = 0
+    # If limit specified, cap it at 10000 for safety
+    if limit > 0:
+        limit = min(limit, 10000)
 
     # Columns: use configured fields; for products, fallback to recommended if empty
     columns_cfg = module.fields_config or []
@@ -581,7 +583,7 @@ def module_data_json(request: HttpRequest, pk: int):
         rec = get_recommended_product_fields()
         columns_cfg = [{'key': f['key'], 'label': f.get('label', f['key'])} for f in rec]
 
-    rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path) if api_path else []
+    rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path, limit=limit) if api_path else []
 
     # Try to detect item_id per row
     id_keys = ['product_id', 'id', 'product.id', 'product.product_id', 'productId', 'productID', 'id_product']
@@ -829,20 +831,30 @@ def product_promo_json(request: HttpRequest, pk: int, item_id: int):
 
 
 @login_required
+@ensure_csrf_cookie
 def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
     """Duplicate a product N times. Copies required fields plus all copyable fields
     that are active in the module's configuration. Generates new unique codes.
     - GET: returns base code/name and default options
     - POST: expects {count:int, code_prefix?:str, code_suffix?:str, add_index?:bool, index_start?:int, bump_name?:bool}
     """
+    logger.info(f"product_duplicate_json called: method={request.method}, pk={pk}, item_id={item_id}, user={request.user}")
+    
     module = get_object_or_404(Module, pk=pk, owner=request.user)
     if module.resource != Module.Resource.PRODUCTS:
+        logger.warning(f"Module {pk} is not a products module: {module.resource}")
         return JsonResponse({'ok': False, 'error': 'Dostępne tylko dla modułu produktów.'}, status=400)
 
     api_path = resolve_path(module.resource, module.api_path_override) or 'products'
+    logger.info(f"Using API path: {api_path}")
+    
     product = fetch_item(module.shop.base_url, module.shop.bearer_token, api_path, item_id)
     if not product:
+        logger.error(f"Failed to fetch product {item_id} from API")
         return JsonResponse({'ok': False, 'error': 'Nie udało się pobrać produktu z API.'}, status=502)
+    
+    # Log full product structure for debugging
+    logger.info(f"Original product structure: {json.dumps(product, indent=2, ensure_ascii=False)[:2000]}...")
 
     # Helper to read translation values
     def get_pl(field: str):
@@ -868,9 +880,12 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
         })
 
     # POST
+    logger.info(f"Processing POST request for duplication")
     try:
         data = json.loads(request.body.decode('utf-8')) if request.body else {}
-    except json.JSONDecodeError:
+        logger.info(f"Parsed request data: {data}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
         return JsonResponse({'ok': False, 'error': 'Invalid JSON payload.'}, status=400)
 
     try:
@@ -918,6 +933,9 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
     if required_errors:
         return JsonResponse({'ok': False, 'error': f'Brak wymaganych pól do duplikacji: {", ".join(required_errors)}'}, status=400)
 
+    # Get type from original product (default to 0 if missing)
+    product_type = dot_get(product, 'type') or 0
+
     def build_code(i: int) -> str:
         idx = ''
         if add_index:
@@ -948,11 +966,14 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
     for copy_idx in range(count):
         new_code = build_code(copy_idx)
         payload: Dict[str, Any] = {
+            'type': product_type,  # Copy from original
             'category_id': category_id,
             'code': new_code,
             'pkwiu': pkwiu,
             'stock': {
                 'price': stock_price_val,
+                'active': True,  # Force stock to be active
+                'default': True,  # Make it default stock
             },
             'translations': {
                 'pl_PL': {
@@ -975,6 +996,33 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
             val = dot_get(product, opt_key)
             if val is not None:
                 payload[opt_key] = val
+                
+        # Copy important stock fields that might be required
+        # Note: Don't copy availability_id from configured fields - we handle it specially
+        stock_required_fields = ['active', 'default', 'calculated_availability_id']
+        for field in stock_required_fields:
+            val = dot_get(product, f'stock.{field}')
+            if val is not None:
+                payload.setdefault('stock', {})[field] = val
+        
+        # Handle availability_id specially - only set if explicitly present and not null
+        availability_id = dot_get(product, 'stock.availability_id')
+        if availability_id is not None and availability_id != '':
+            payload.setdefault('stock', {})['availability_id'] = availability_id
+        
+        # Copy essential product level fields that might be required for visibility
+        essential_fields = ['group_id', 'currency_id']
+        for field in essential_fields:
+            val = dot_get(product, field)
+            if val is not None:
+                payload[field] = val
+                
+        # Copy optional product level fields 
+        optional_fields = ['bestseller', 'newproduct', 'in_loyalty']
+        for field in optional_fields:
+            val = dot_get(product, field)
+            if val is not None:
+                payload[field] = val
 
         # Copy any additional stock fields present in product and configured
         # plus stock.additional_codes when available
@@ -1005,23 +1053,43 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
                 safe_copy_key(payload, k, val)
 
         # Try create; if code conflict occurs, auto-bump code with incremental suffix
+        logger.info(f"Attempting to create product {copy_idx + 1}/{count}")
+        logger.info(f"Payload keys: {list(payload.keys())}")
+        logger.info(f"Stock keys: {list(payload.get('stock', {}).keys())}")
+        logger.info(f"Full payload: {json.dumps(payload, indent=2, ensure_ascii=False)[:1500]}...")
         ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
+        logger.info(f"Create product result: ok={ok}, msg={msg}, new_id={new_id}")
+        
         if not ok and isinstance(msg, str):
             lower = msg.lower()
-            conflict = ('code' in lower and ('istnieje' in lower or 'exist' in lower)) or 'już istnieje' in lower
+            # Check for various code conflict indicators from API response
+            conflict = (
+                ('code' in lower and ('istnieje' in lower or 'exist' in lower)) or 
+                'już istnieje' in lower or
+                'already exists' in lower or
+                'already in use' in lower or
+                'duplicate' in lower or
+                ('wartość' in lower and 'istnieje' in lower) or  # Polish Shoper API message
+                ('value' in lower and 'already' in lower and 'exist' in lower)
+            )
+            logger.info(f"Checking for code conflict in message: '{msg}', conflict detected: {conflict}")
             if conflict:
+                logger.info(f"Code conflict detected, attempting to bump code for product {copy_idx + 1}")
                 bumped = False
                 for bump_idx in range(1, 15):
                     payload['code'] = f"{new_code}-{bump_idx+1}"
+                    logger.info(f"Retry with bumped code: {payload['code']}")
                     ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
                     if ok:
                         bumped = True
+                        logger.info(f"Successfully created with bumped code: {payload['code']}")
                         break
                 if not bumped:
                     # Try a random short suffix to avoid collisions
                     import random, string
                     suffix = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(4))
                     payload['code'] = f"{new_code}-{suffix}"
+                    logger.info(f"Final retry with random suffix: {payload['code']}")
                     ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
 
         if ok:
@@ -1037,7 +1105,13 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
                         if not key:
                             continue
                         val = dot_get(new_item, key)
-                        if isinstance(val, (dict, list)):
+                        # Keep arrays and simple values as-is for Tabulator
+                        # Only serialize complex nested objects
+                        if isinstance(val, list):
+                            # Keep simple arrays (like categories, collections) as arrays
+                            row_map[key] = val
+                        elif isinstance(val, dict):
+                            # Serialize complex objects to JSON string
                             try:
                                 row_map[key] = json.dumps(val, ensure_ascii=False)
                             except Exception:
@@ -1051,6 +1125,8 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
             results.append({'ok': True, 'product_id': new_id, 'code': payload.get('code', new_code), 'row': new_row})
         else:
             failed += 1
+            logger.warning(f"Failed to create product {copy_idx + 1}: {msg}")
             results.append({'ok': False, 'error': msg, 'code': payload.get('code', new_code)})
 
+    logger.info(f"Duplication completed: created={created}, failed={failed}")
     return JsonResponse({'ok': True, 'created': created, 'failed': failed, 'results': results})

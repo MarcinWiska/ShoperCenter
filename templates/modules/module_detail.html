@@ -160,7 +160,17 @@
             editableKeys.forEach(k => {
               const a = snap[k];
               const b = r[k];
-              if (String(a) !== String(b)) changes[k] = b;
+              // Special handling for ID fields: treat null, undefined, and empty string as equivalent
+              if (k.endsWith('_id')) {
+                const aIsEmpty = (a === null || a === undefined || a === '');
+                const bIsEmpty = (b === null || b === undefined || b === '');
+                if (aIsEmpty && bIsEmpty) return; // both empty, no change
+                if (!aIsEmpty && !bIsEmpty && String(a) === String(b)) return; // both have values and match
+                // Otherwise there's a real change
+                changes[k] = b;
+              } else if (String(a) !== String(b)) {
+                changes[k] = b;
+              }
             });
             if (Object.keys(changes).length) rows.push({ item_id: id, changes });
           });
@@ -747,27 +757,79 @@
       const add_index = document.getElementById('dup-add-index').checked;
       const bump_name = document.getElementById('dup-bump-name').checked;
       try {
-        const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+        // Improved CSRF token retrieval
+        function getCsrfToken() {
+          const cookies = document.cookie.split(';');
+          for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'csrftoken') {
+              return value;
+            }
+          }
+          // Fallback: try from meta tag
+          const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          if (csrfMeta) {
+            return csrfMeta.getAttribute('content');
+          }
+          return '';
+        }
+        
+        const csrftoken = getCsrfToken();
+        const headers = { 
+          'Content-Type': 'application/json', 
+          'Accept': 'application/json'
+        };
+        if (csrftoken) {
+          headers['X-CSRFToken'] = csrftoken;
+        }
+        
         const resp = await fetch(`/modules/${dupState.modulePk}/products/${dupState.itemId}/duplicate.json`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrftoken },
+          method: 'POST', 
+          headers: headers,
           body: JSON.stringify({ count, code_prefix, code_suffix, add_index, index_start: 1, bump_name })
         });
+        
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          throw new Error(`HTTP ${resp.status}: ${errorText}`);
+        }
+        
         const data = await resp.json();
         if (!data.ok) throw new Error(data.error || 'Błąd duplikacji');
         showDupSuccess(`Utworzono: ${data.created}, błędów: ${data.failed}`);
+        
         // If we have the grid and backend returned new rows, append them immediately
         if (window.__productGrid && Array.isArray(data.results)) {
           const addRows = [];
           data.results.forEach(r => { if (r && r.ok && r.row) addRows.push(r.row); });
           if (addRows.length) {
+            // CRITICAL: Add new rows to originalSnapshot BEFORE adding to grid
+            // This prevents them from being detected as "modified" in the diff logic
+            if (window.originalSnapshot) {
+              addRows.forEach(row => {
+                if (row.item_id) {
+                  // Create a snapshot of editable fields matching current row values
+                  const snap = {};
+                  window.editableKeys.forEach(k => { snap[k] = row[k]; });
+                  window.originalSnapshot.set(row.item_id, snap);
+                }
+              });
+            }
+            
+            // Add rows to grid without triggering cellEdited events
             window.__productGrid.addData(addRows, true).then(() => {
-              // Optionally scroll to top
-              window.__productGrid.scrollToRow(addRows[0].item_id);
-            }).catch(() => {});
+              // Scroll to first new row
+              if (addRows[0] && addRows[0].item_id) {
+                window.__productGrid.scrollToRow(addRows[0].item_id, "top", false);
+              }
+            }).catch((gridError) => {
+              console.warn('Grid update failed:', gridError);
+            });
           }
         }
         setTimeout(() => { closeDuplicateModal(); }, 800);
       } catch (e) {
+        console.error('Duplicate error:', e);
         showDupError(e.message || 'Błąd duplikacji.');
       }
       return false;

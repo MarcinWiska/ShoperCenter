@@ -125,7 +125,14 @@ def create_product(base_url: str, token: str, payload: Dict[str, Any]) -> Tuple[
             try:
                 data = resp.json()
                 if isinstance(data, dict):
-                    error_msg = data.get('error', data.get('message', data.get('errors', str(data))))
+                    # Try to get detailed error message from Shoper API
+                    error_msg = (
+                        data.get('error_description') or 
+                        data.get('error') or 
+                        data.get('message') or 
+                        data.get('errors') or 
+                        str(data)
+                    )
                 else:
                     error_msg = str(data)
             except Exception:
@@ -791,24 +798,68 @@ def fetch_fields(base_url: str, token: str, path: str, limit: int = 20) -> List[
 
 
 def fetch_rows(base_url: str, token: str, path: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Fetch all items from API with pagination support.
+    Shoper API returns pagination info in response: {count, pages, page, list: [...]}
+    We'll fetch page by page until we get all items or reach a reasonable limit.
+    """
     p = path.strip('/')
-    data: Optional[Any] = None
+    all_items: List[Dict[str, Any]] = []
+    page = 1
+    per_page = 50  # Shoper API default/max per page
+    max_pages = 100  # Safety limit to prevent infinite loops
+    
     for root in build_rest_roots(base_url):
-        candidates = [
-            urljoin(root, p) + f'?limit={limit}',
-            urljoin(root, p + '/') + f'?limit={limit}',
-            urljoin(root, p),
-        ]
-        for url in candidates:
-            data, _ = _try_get_json(url, token)
-            if data is not None:
-                break
-        if data is not None:
-            break
-    if data is None:
-        return []
-    items = extract_items(data)
-    return items[:limit] if isinstance(items, list) else []
+        while page <= max_pages:
+            candidates = [
+                urljoin(root, p) + f'?limit={per_page}&page={page}',
+                urljoin(root, p + '/') + f'?limit={per_page}&page={page}',
+            ]
+            
+            data = None
+            for url in candidates:
+                data, _ = _try_get_json(url, token)
+                if data is not None:
+                    break
+            
+            if data is None:
+                # If first page failed, try other roots
+                if page == 1:
+                    break
+                else:
+                    # No more pages available
+                    return all_items[:limit] if limit > 0 else all_items
+            
+            items = extract_items(data)
+            if not items or not isinstance(items, list):
+                # No more items, we're done
+                return all_items[:limit] if limit > 0 else all_items
+            
+            all_items.extend(items)
+            
+            # Check if we've reached the limit
+            if limit > 0 and len(all_items) >= limit:
+                return all_items[:limit]
+            
+            # Check pagination metadata from Shoper API
+            # Response format: {count: total, pages: total_pages, page: current_page, list: [...]}
+            if isinstance(data, dict):
+                total_pages = data.get('pages')
+                current_page = data.get('page')
+                if total_pages and current_page and current_page >= total_pages:
+                    # We've fetched all pages
+                    return all_items[:limit] if limit > 0 else all_items
+            
+            # If we got fewer items than per_page, probably last page
+            if len(items) < per_page:
+                return all_items[:limit] if limit > 0 else all_items
+            
+            page += 1
+        
+        # If we successfully fetched items, don't try other roots
+        if all_items:
+            return all_items[:limit] if limit > 0 else all_items
+    
+    return []
 
 
 def resolve_path(resource: str, override: Optional[str]) -> Optional[str]:
