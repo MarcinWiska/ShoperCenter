@@ -80,23 +80,46 @@ module.exports = {
       {
         shoperdark: {
           ...require('daisyui/src/theming/themes')['dark'],
-          primary: '#ef4444',
+          primary: '#ef4444',        // Red-500
+          'primary-focus': '#dc2626', // Red-600
           'primary-content': '#ffffff',
-          secondary: '#7f1d1d',
-          accent: '#fca5a5',
-          neutral: '#1e293b',
-          'neutral-content': '#cbd5e1',
-          'base-100': '#0f172a',
-          'base-200': '#1e293b',
-          'base-300': '#334155',
-          'base-content': '#f1f5f9',
-          info: '#38bdf8',
-          success: '#22c55e',
-          warning: '#f59e0b',
-          error: '#ef4444',
+          secondary: '#7f1d1d',       // Red-900
+          'secondary-focus': '#991b1b', // Red-800
+          'secondary-content': '#ffffff',
+          accent: '#fca5a5',          // Red-300
+          'accent-focus': '#f87171',  // Red-400
+          'accent-content': '#7f1d1d',
+          neutral: '#1e293b',         // Slate-800
+          'neutral-focus': '#0f172a', // Slate-900
+          'neutral-content': '#e2e8f0',
+          'base-100': '#020617',      // Slate-950 - darkest background
+          'base-200': '#0f172a',      // Slate-900
+          'base-300': '#1e293b',      // Slate-800
+          'base-content': '#f1f5f9',  // Slate-100 - light text
+          info: '#38bdf8',            // Sky-400
+          'info-content': '#0c4a6e',
+          success: '#22c55e',         // Green-500
+          'success-content': '#14532d',
+          warning: '#f59e0b',         // Amber-500
+          'warning-content': '#78350f',
+          error: '#ef4444',           // Red-500
+          'error-content': '#7f1d1d',
+          '--rounded-box': '1rem',
+          '--rounded-btn': '0.75rem',
+          '--rounded-badge': '1rem',
+          '--animation-btn': '0.2s',
+          '--animation-input': '0.2s',
+          '--btn-text-case': 'none',
+          '--border-btn': '1px',
+          '--tab-border': '1px',
         },
       },
     ],
     darkTheme: 'shoperdark',
+    base: true,
+    styled: true,
+    utils: true,
+    logs: false,
   },
+  darkMode: ['class', '[data-theme="shoperdark"]'],
 }

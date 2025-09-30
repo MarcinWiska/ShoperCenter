@@ -1,28 +1,86 @@
 {% extends 'base.html' %}
 {% block title %}Twoje sklepy — ShoperCenter{% endblock %}
-{% block content %}
-<div class="flex justify-between items-center mb-4">
-  <h1 class="text-2xl font-semibold">Twoje sklepy</h1>
-  <a class="btn btn-primary" href="{% url 'shops:add' %}">Dodaj sklep</a>
-  </div>
+{% block page_title %}Sklepy{% endblock %}
+{% block page_subtitle %}Zarządzaj połączonymi sklepami Shoper{% endblock %}
 
-<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-  {% for shop in shops %}
-    <div class="card bg-base-100 shadow">
-      <div class="card-body">
-        <h2 class="card-title">{{ shop.name }}</h2>
-        <p class="text-sm text-base-content/70 break-all">{{ shop.base_url }}</p>
-        <div class="card-actions justify-end">
-          <a class="btn btn-sm" href="{% url 'shops:test' shop.pk %}">Testuj</a>
-          <a class="btn btn-sm" href="{% url 'shops:edit' shop.pk %}">Edytuj</a>
-          <a class="btn btn-sm btn-error" href="{% url 'shops:delete' shop.pk %}">Usuń</a>
-        </div>
+{% block content %}
+<div class="animate-fade-in">
+
+  <!-- Header with action -->
+  <div class="flex justify-between items-center mb-8">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center">
+        <i class="fas fa-store text-red-400 text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-white">Twoje sklepy</h1>
+        <p class="text-sm text-gray-400 mt-1">Połączone sklepy Shoper</p>
       </div>
     </div>
-  {% empty %}
-    <div class="col-span-full">
-      <div class="alert">Brak sklepów. Dodaj pierwszy.</div>
-    </div>
-  {% endfor %}
+    <a class="btn-primary" href="{% url 'shops:add' %}">
+      <i class="fas fa-plus"></i>
+      Dodaj sklep
+    </a>
+  </div>
+
+  <!-- Shops Grid -->
+  <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    {% for shop in shops %}
+      <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover">
+        
+        <!-- Shop Header -->
+        <div class="flex items-start gap-4 mb-4">
+          <div class="w-14 h-14 bg-gradient-to-br from-red-600 to-red-700 rounded-xl flex items-center justify-center glow-red">
+            <i class="fas fa-shopping-bag text-white text-xl"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h2 class="text-lg font-bold text-white mb-1 truncate">{{ shop.name }}</h2>
+            <p class="text-xs text-gray-400 break-all line-clamp-2">{{ shop.base_url }}</p>
+          </div>
+        </div>
+
+        <!-- Shop Info -->
+        <div class="bg-gray-950/50 rounded-xl p-4 mb-4 border border-gray-800/50">
+          <div class="flex items-center gap-2 text-sm">
+            <i class="fas fa-link text-gray-500"></i>
+            <span class="text-gray-400">Status:</span>
+            <span class="badge badge-success">
+              <i class="fas fa-check-circle mr-1"></i>
+              Połączony
+            </span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-2">
+          <a class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-lg text-sm font-medium transition-all text-center border border-gray-700" href="{% url 'shops:test' shop.pk %}">
+            <i class="fas fa-vial mr-1"></i>
+            Testuj
+          </a>
+          <a class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-lg text-sm font-medium transition-all text-center border border-gray-700" href="{% url 'shops:edit' shop.pk %}">
+            <i class="fas fa-edit mr-1"></i>
+            Edytuj
+          </a>
+          <a class="bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-all border border-red-600/30 hover:border-red-600" href="{% url 'shops:delete' shop.pk %}">
+            <i class="fas fa-trash"></i>
+          </a>
+        </div>
+
+      </div>
+    {% empty %}
+      <div class="col-span-full bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-12 border border-gray-800/50 text-center">
+        <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fas fa-store text-gray-600 text-3xl"></i>
+        </div>
+        <h3 class="text-xl font-bold text-white mb-2">Brak sklepów</h3>
+        <p class="text-gray-400 mb-6">Dodaj pierwszy sklep Shoper, aby rozpocząć pracę</p>
+        <a class="btn-primary" href="{% url 'shops:add' %}">
+          <i class="fas fa-plus"></i>
+          Dodaj pierwszy sklep
+        </a>
+      </div>
+    {% endfor %}
+  </div>
+
 </div>
 {% endblock %}

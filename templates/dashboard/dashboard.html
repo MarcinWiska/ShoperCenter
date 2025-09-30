@@ -1,0 +1,326 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - ShoperCenter{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Przegląd statystyk i aktywności Twoich sklepów{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in space-y-8">
+  
+  <!-- Quick Stats Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    
+    <!-- Sklepy -->
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover relative overflow-hidden group">
+      <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div class="relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+            <i class="fas fa-store text-red-400 text-xl"></i>
+          </div>
+          <span class="text-2xl font-bold text-white">{{ shops_count }}</span>
+        </div>
+        <p class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Aktywne sklepy</p>
+      </div>
+    </div>
+
+    <!-- Moduły -->
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover relative overflow-hidden group">
+      <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div class="relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+            <i class="fas fa-puzzle-piece text-red-400 text-xl"></i>
+          </div>
+          <span class="text-2xl font-bold text-white">{{ modules_count }}</span>
+        </div>
+        <p class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Zainstalowane moduły</p>
+      </div>
+    </div>
+
+    <!-- Przekierowania -->
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover relative overflow-hidden group">
+      <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div class="relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+            <i class="fas fa-exchange-alt text-red-400 text-xl"></i>
+          </div>
+          <span class="text-2xl font-bold text-white">{{ redirects_count }}</span>
+        </div>
+        <p class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Przekierowania SEO</p>
+      </div>
+    </div>
+
+    <!-- Produkty -->
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover relative overflow-hidden group">
+      <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div class="relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+            <i class="fas fa-box text-red-400 text-xl"></i>
+          </div>
+          <span class="text-2xl font-bold text-white">{{ product_stats.total }}</span>
+        </div>
+        <p class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Wszystkie produkty</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Statystyki Zamówień -->
+  <div>
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-white flex items-center">
+        <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mr-3">
+          <i class="fas fa-shopping-cart text-red-400"></i>
+        </div>
+        Zamówienia
+      </h2>
+      <a href="/orders/" class="text-sm text-red-400 hover:text-red-300 transition-colors flex items-center gap-2">
+        Zobacz wszystkie <i class="fas fa-arrow-right text-xs"></i>
+      </a>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      
+      <!-- Wszystkie zamówienia -->
+      <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 border border-gray-800/50 hover:border-red-500/30 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-list-alt text-gray-400 text-lg"></i>
+          <span class="text-3xl font-bold text-white">{{ order_stats.total }}</span>
+        </div>
+        <p class="text-sm font-medium text-gray-400">Wszystkie</p>
+        <div class="mt-2 flex gap-2 text-xs">
+          <span class="text-green-400"><i class="fas fa-arrow-up mr-1"></i>Dziś: {{ order_stats.today }}</span>
+        </div>
+      </div>
+
+      <!-- Oczekujące na opłatę -->
+      <div class="bg-gradient-to-br from-yellow-950/30 to-gray-900 rounded-xl p-5 border border-yellow-700/30 hover:border-yellow-500/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-clock text-yellow-400 text-lg"></i>
+          <span class="text-3xl font-bold text-yellow-300">{{ order_stats.pending_payment }}</span>
+        </div>
+        <p class="text-sm font-medium text-yellow-400">Czeka na opłacenie</p>
+        <div class="mt-2 text-xs text-gray-400">
+          <span>Wymaga uwagi</span>
+        </div>
+      </div>
+
+      <!-- Opłacone -->
+      <div class="bg-gradient-to-br from-green-950/30 to-gray-900 rounded-xl p-5 border border-green-700/30 hover:border-green-500/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-check-circle text-green-400 text-lg"></i>
+          <span class="text-3xl font-bold text-green-300">{{ order_stats.paid }}</span>
+        </div>
+        <p class="text-sm font-medium text-green-400">Opłacone</p>
+        <div class="mt-2 text-xs text-gray-400">
+          <span>Gotowe do realizacji</span>
+        </div>
+      </div>
+
+      <!-- W dostawie -->
+      <div class="bg-gradient-to-br from-blue-950/30 to-gray-900 rounded-xl p-5 border border-blue-700/30 hover:border-blue-500/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-truck text-blue-400 text-lg"></i>
+          <span class="text-3xl font-bold text-blue-300">{{ order_stats.in_delivery }}</span>
+        </div>
+        <p class="text-sm font-medium text-blue-400">W dostawie</p>
+        <div class="mt-2 text-xs text-gray-400">
+          <span>W trakcie realizacji</span>
+        </div>
+      </div>
+
+      <!-- Zrealizowane -->
+      <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-check-double text-gray-400 text-lg"></i>
+          <span class="text-3xl font-bold text-white">{{ order_stats.completed }}</span>
+        </div>
+        <p class="text-sm font-medium text-gray-400">Zrealizowane</p>
+        <div class="mt-2 text-xs text-gray-500">
+          <span>Ukończone</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Statystyki czasowe -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+      <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800/50">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 uppercase">Dziś</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ order_stats.today }}</p>
+          </div>
+          <i class="fas fa-calendar-day text-red-400 text-2xl"></i>
+        </div>
+      </div>
+      
+      <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800/50">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 uppercase">Ten tydzień</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ order_stats.this_week }}</p>
+          </div>
+          <i class="fas fa-calendar-week text-red-400 text-2xl"></i>
+        </div>
+      </div>
+      
+      <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800/50">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 uppercase">Ten miesiąc</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ order_stats.this_month }}</p>
+          </div>
+          <i class="fas fa-calendar-alt text-red-400 text-2xl"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Statystyki Produktów -->
+  <div>
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-white flex items-center">
+        <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mr-3">
+          <i class="fas fa-box-open text-red-400"></i>
+        </div>
+        Produkty
+      </h2>
+      <a href="/modules/" class="text-sm text-red-400 hover:text-red-300 transition-colors flex items-center gap-2">
+        Zarządzaj produktami <i class="fas fa-arrow-right text-xs"></i>
+      </a>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 border border-gray-800/50 hover:border-red-500/30 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-boxes text-gray-400 text-lg"></i>
+          <span class="text-3xl font-bold text-white">{{ product_stats.total }}</span>
+        </div>
+        <p class="text-sm font-medium text-gray-400">Wszystkie produkty</p>
+      </div>
+
+      <div class="bg-gradient-to-br from-green-950/30 to-gray-900 rounded-xl p-5 border border-green-700/30 hover:border-green-500/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-toggle-on text-green-400 text-lg"></i>
+          <span class="text-3xl font-bold text-green-300">{{ product_stats.active }}</span>
+        </div>
+        <p class="text-sm font-medium text-green-400">Aktywne</p>
+      </div>
+
+      <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-toggle-off text-gray-400 text-lg"></i>
+          <span class="text-3xl font-bold text-gray-300">{{ product_stats.inactive }}</span>
+        </div>
+        <p class="text-sm font-medium text-gray-400">Nieaktywne</p>
+      </div>
+
+      <div class="bg-gradient-to-br from-red-950/30 to-gray-900 rounded-xl p-5 border border-red-700/30 hover:border-red-500/50 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <i class="fas fa-exclamation-triangle text-red-400 text-lg"></i>
+          <span class="text-3xl font-bold text-red-300">{{ product_stats.out_of_stock }}</span>
+        </div>
+        <p class="text-sm font-medium text-red-400">Brak w magazynie</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Sklepy - szczegółowe statystyki -->
+  {% if shop_stats %}
+  <div>
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-white flex items-center">
+        <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mr-3">
+          <i class="fas fa-store-alt text-red-400"></i>
+        </div>
+        Statystyki per sklep
+      </h2>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {% for stat in shop_stats %}
+      <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-white">{{ stat.shop.name }}</h3>
+          <a href="/modules/?shop={{ stat.shop.id }}" class="text-xs text-red-400 hover:text-red-300 transition-colors">
+            Zobacz moduły <i class="fas fa-arrow-right ml-1"></i>
+          </a>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-gray-800/50 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-gray-400">Zamówienia</span>
+              <i class="fas fa-shopping-cart text-red-400"></i>
+            </div>
+            <p class="text-2xl font-bold text-white">{{ stat.orders.total }}</p>
+            <div class="mt-2 flex gap-2 text-xs">
+              <span class="text-yellow-400">⏳ {{ stat.orders.pending_payment }}</span>
+              <span class="text-green-400">✓ {{ stat.orders.paid }}</span>
+            </div>
+          </div>
+          
+          <div class="bg-gray-800/50 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-gray-400">Produkty</span>
+              <i class="fas fa-box text-red-400"></i>
+            </div>
+            <p class="text-2xl font-bold text-white">{{ stat.products.total }}</p>
+            <div class="mt-2 flex gap-2 text-xs">
+              <span class="text-green-400">✓ {{ stat.products.active }}</span>
+              <span class="text-red-400">⚠ {{ stat.products.out_of_stock }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Actions -->
+  <div>
+    <div class="flex items-center mb-6">
+      <h2 class="text-2xl font-bold text-white flex items-center">
+        <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mr-3">
+          <i class="fas fa-bolt text-red-400"></i>
+        </div>
+        Szybkie akcje
+      </h2>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <a href="/modules/add/" class="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-6 hover:from-red-700 hover:to-red-800 transition-all duration-300 card-hover group">
+        <i class="fas fa-plus-circle text-white text-3xl mb-3 group-hover:scale-110 transition-transform"></i>
+        <h3 class="text-lg font-bold text-white mb-1">Nowy moduł</h3>
+        <p class="text-sm text-red-100">Dodaj nowy moduł do sklepu</p>
+      </a>
+      
+      <a href="/shops/add/" class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-red-500/50 transition-all duration-300 card-hover group">
+        <i class="fas fa-store text-red-400 text-3xl mb-3 group-hover:scale-110 transition-transform"></i>
+        <h3 class="text-lg font-bold text-white mb-1">Dodaj sklep</h3>
+        <p class="text-sm text-gray-400">Połącz nowy sklep Shoper</p>
+      </a>
+      
+      <a href="/redirects/add/" class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-red-500/50 transition-all duration-300 card-hover group">
+        <i class="fas fa-route text-red-400 text-3xl mb-3 group-hover:scale-110 transition-transform"></i>
+        <h3 class="text-lg font-bold text-white mb-1">Przekierowanie</h3>
+        <p class="text-sm text-gray-400">Utwórz nowe przekierowanie SEO</p>
+      </a>
+      
+      <a href="/modules/" class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-red-500/50 transition-all duration-300 card-hover group">
+        <i class="fas fa-th-large text-red-400 text-3xl mb-3 group-hover:scale-110 transition-transform"></i>
+        <h3 class="text-lg font-bold text-white mb-1">Wszystkie moduły</h3>
+        <p class="text-sm text-gray-400">Zarządzaj modułami</p>
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

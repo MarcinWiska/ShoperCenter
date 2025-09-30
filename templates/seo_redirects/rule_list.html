@@ -1,30 +1,52 @@
 {% extends 'base.html' %}
 {% block title %}Przekierowania SEO — ShoperCenter{% endblock %}
-{% block content %}
-<div class="flex justify-between items-center mb-4">
-  <h1 class="text-2xl font-semibold">Przekierowania SEO</h1>
-  <a class="btn btn-primary" href="{% url 'seo_redirects:add' %}">Nowe przekierowanie</a>
-</div>
+{% block page_title %}Przekierowania SEO{% endblock %}
+{% block page_subtitle %}Zarządzaj przekierowaniami 301/302 w sklepach{% endblock %}
 
-<div class="overflow-x-auto">
-  <table class="table table-zebra w-full">
-    <thead>
-      <tr>
-        <th>Sklep</th>
-        <th>Typ</th>
-        <th>Źródło</th>
-        <th>Cel</th>
-        <th>Kod</th>
-        
-        <th>Sync</th>
-        <th>Akcje</th>
+{% block content %}
+<div class="animate-fade-in">
+
+  <!-- Header with action -->
+  <div class="flex justify-between items-center mb-8">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center">
+        <i class="fas fa-exchange-alt text-red-400 text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-white">Przekierowania SEO</h1>
+        <p class="text-sm text-gray-400 mt-1">301/302 redirects dla optymalizacji SEO</p>
+      </div>
+    </div>
+    <a class="btn-primary" href="{% url 'seo_redirects:add' %}">
+      <i class="fas fa-plus"></i>
+      Nowe przekierowanie
+    </a>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container mb-8">
+    <table class="table w-full">
+    <thead class="bg-gray-900">
+      <tr class="text-gray-400 border-b border-gray-800">
+        <th class="font-semibold">Sklep</th>
+        <th class="font-semibold">Typ</th>
+        <th class="font-semibold">Źródło</th>
+        <th class="font-semibold">Cel</th>
+        <th class="font-semibold">Kod</th>
+        <th class="font-semibold">Sync</th>
+        <th class="font-semibold">Akcje</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody class="text-gray-300">
     {% for r in rules %}
-      <tr>
-        <td>{{ r.shop.name }}</td>
-        <td>{{ r.get_rule_type_display }}</td>
+      <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+        <td>
+          <div class="flex items-center gap-2">
+            <i class="fas fa-store text-gray-500 text-xs"></i>
+            <span class="font-medium">{{ r.shop.name }}</span>
+          </div>
+        </td>
+        <td><span class="badge badge-info">{{ r.get_rule_type_display }}</span></td>
         <td>
           {% if r.source_full_url %}
             <a class="link link-primary text-xs break-all" href="{{ r.source_full_url }}" target="_blank" rel="noopener">{{ r.source_full_url }}</a>
@@ -43,38 +65,76 @@
         </td>
         <td>
           {% if r.target_full_url %}
-            <a class="link text-xs break-all" href="{{ r.target_full_url }}" target="_blank" rel="noopener">{{ r.target_full_url }}</a>
+            <a class="text-red-400 hover:text-red-300 text-xs break-all underline" href="{{ r.target_full_url }}" target="_blank" rel="noopener">{{ r.target_full_url }}</a>
           {% else %}
-            <code class="text-xs">{{ r.target_url }}</code>
+            <code class="bg-gray-800 px-2 py-1 rounded text-xs text-red-400">{{ r.target_url }}</code>
           {% endif %}
         </td>
-        <td>{{ r.status_code }}</td>
+        <td>
+          <span class="badge {% if r.status_code == 301 %}badge-success{% else %}badge-warning{% endif %}">
+            {{ r.status_code }}
+          </span>
+        </td>
         <td>
           {% if r.remote_id %}
-            <div class="text-xs">ID: {{ r.remote_id }}</div>
+            <div class="text-xs text-gray-400">ID: {{ r.remote_id }}</div>
           {% endif %}
-          <div class="text-xs opacity-70">{{ r.last_sync_status }}</div>
+          <div class="text-xs text-gray-500">{{ r.last_sync_status }}</div>
         </td>
-        <td class="space-x-1">
-          <a class="btn btn-xs" href="{% url 'seo_redirects:edit' r.pk %}">Edytuj</a>
-          <a class="btn btn-xs btn-error" href="{% url 'seo_redirects:delete' r.pk %}">Usuń</a>
-          <a class="btn btn-xs btn-primary" href="{% url 'seo_redirects:sync' r.pk %}">Sync</a>
+        <td>
+          <div class="flex gap-1">
+            <a class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs transition-all" href="{% url 'seo_redirects:edit' r.pk %}">
+              <i class="fas fa-edit"></i>
+            </a>
+            <a class="bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white px-2 py-1 rounded text-xs transition-all" href="{% url 'seo_redirects:delete' r.pk %}">
+              <i class="fas fa-trash"></i>
+            </a>
+            <a class="bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white px-2 py-1 rounded text-xs transition-all" href="{% url 'seo_redirects:sync' r.pk %}">
+              <i class="fas fa-sync"></i>
+            </a>
+          </div>
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="8">Brak przekierowań. Dodaj pierwsze.</td></tr>
+      <tr>
+        <td colspan="7" class="text-center py-12">
+          <div class="flex flex-col items-center gap-3">
+            <i class="fas fa-exchange-alt text-gray-600 text-3xl"></i>
+            <span class="text-gray-500">Brak przekierowań. Dodaj pierwsze.</span>
+          </div>
+        </td>
+      </tr>
     {% endfor %}
     </tbody>
   </table>
-</div>
-<div class="mt-4">
-  <h2 class="text-lg font-semibold mb-2">Pobierz istniejące przekierowania z API</h2>
-  <div class="flex flex-wrap gap-2">
-    {% for s in shops %}
-      <a class="btn btn-sm" href="{% url 'seo_redirects:pull' s.id %}">Pobierz: {{ s.name }}</a>
-    {% empty %}
-      <div class="opacity-70">Brak sklepów przypisanych do konta.</div>
-    {% endfor %}
   </div>
+
+  <!-- Pull from API Section -->
+  <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
+        <i class="fas fa-cloud-download-alt text-blue-400"></i>
+      </div>
+      <div>
+        <h2 class="text-lg font-bold text-white">Pobierz z API</h2>
+        <p class="text-sm text-gray-400">Importuj istniejące przekierowania ze sklepów</p>
+      </div>
+    </div>
+    
+    <div class="flex flex-wrap gap-3">
+      {% for s in shops %}
+        <a class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all border border-gray-700 flex items-center gap-2" href="{% url 'seo_redirects:pull' s.id %}">
+          <i class="fas fa-download"></i>
+          {{ s.name }}
+        </a>
+      {% empty %}
+        <div class="text-gray-500 text-sm">
+          <i class="fas fa-info-circle text-blue-400 mr-2"></i>
+          Brak sklepów przypisanych do konta.
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
 </div>
 {% endblock %}

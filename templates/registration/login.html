@@ -1,24 +1,203 @@
-{% extends 'base.html' %}
-{% block title %}Logowanie — ShoperCenter{% endblock %}
-{% block content %}
-<div class="max-w-md mx-auto card bg-base-100 shadow">
-  <div class="card-body">
-    <h1 class="card-title">Zaloguj się</h1>
-    <form method="post" class="space-y-4">
-      {% csrf_token %}
-      {{ form.non_field_errors }}
-      <div class="form-control">
-        <label class="label"><span class="label-text">Nazwa użytkownika</span></label>
-        <input type="text" name="username" required class="input input-bordered" id="id_username" />
+<!DOCTYPE html>
+<html lang="pl" data-theme="shoperdark" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark">
+  <title>Logowanie — ShoperCenter</title>
+  {% load static %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    .login-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e293b 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .login-container::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, rgba(239, 68, 68, 0.1) 0%, transparent 70%);
+      animation: float 20s ease-in-out infinite;
+    }
+    
+    .login-container::after {
+      content: '';
+      position: absolute;
+      bottom: -50%;
+      left: -50%;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, rgba(239, 68, 68, 0.05) 0%, transparent 70%);
+      animation: float 25s ease-in-out infinite reverse;
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(50px, 50px); }
+    }
+    
+    .login-box {
+      position: relative;
+      z-index: 10;
+      animation: fadeInUp 0.6s ease-out;
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .form-input {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #f1f5f9;
+      border-radius: 0.75rem;
+      padding: 0.875rem 1rem;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    
+    .form-input:focus {
+      outline: none;
+      border-color: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+      background: #1e293b;
+    }
+    
+    .btn-login {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      padding: 0.875rem 2rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      font-size: 1rem;
+    }
+    
+    .btn-login:hover {
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+    }
+  </style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="login-box w-full max-w-md px-4">
+    
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl border border-gray-800/50 overflow-hidden shadow-2xl">
+      
+      <!-- Logo Section -->
+      <div class="bg-gray-900/50 border-b border-gray-800/50 px-8 py-8 text-center">
+        <div class="w-20 h-20 bg-gradient-to-br from-red-600 via-red-500 to-red-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+          <i class="fas fa-store text-white text-3xl"></i>
+        </div>
+        <h1 class="text-3xl font-bold text-white mb-2">ShoperCenter</h1>
+        <p class="text-sm text-gray-400">Zaloguj się do panelu zarządzania</p>
       </div>
-      <div class="form-control">
-        <label class="label"><span class="label-text">Hasło</span></label>
-        <input type="password" name="password" required class="input input-bordered" id="id_password" />
+
+      <!-- Form Section -->
+      <div class="p-8">
+        <form method="post" class="space-y-6">
+          {% csrf_token %}
+          
+          {% if form.non_field_errors %}
+          <div class="bg-red-600/10 border border-red-600/30 rounded-xl p-4 flex items-center gap-3">
+            <i class="fas fa-exclamation-circle text-red-400"></i>
+            <span class="text-red-400 text-sm">{{ form.non_field_errors.0 }}</span>
+          </div>
+          {% endif %}
+
+          <!-- Username -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              <i class="fas fa-user text-red-400 mr-2"></i>
+              Nazwa użytkownika
+            </label>
+            <input 
+              type="text" 
+              name="username" 
+              required 
+              class="form-input" 
+              id="id_username"
+              placeholder="Wpisz nazwę użytkownika"
+              autofocus
+            />
+          </div>
+
+          <!-- Password -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              <i class="fas fa-lock text-red-400 mr-2"></i>
+              Hasło
+            </label>
+            <input 
+              type="password" 
+              name="password" 
+              required 
+              class="form-input" 
+              id="id_password"
+              placeholder="Wpisz hasło"
+            />
+          </div>
+
+          <!-- Submit Button -->
+          <button class="btn-login" type="submit">
+            <i class="fas fa-sign-in-alt mr-2"></i>
+            Zaloguj się
+          </button>
+
+        </form>
+
+        <!-- Footer Info -->
+        <div class="mt-6 pt-6 border-t border-gray-800/50 text-center">
+          <p class="text-xs text-gray-500">
+            <i class="fas fa-shield-alt text-red-400 mr-1"></i>
+            Bezpieczne połączenie z API Shoper
+          </p>
+        </div>
       </div>
-      <div class="card-actions justify-end">
-        <button class="btn btn-primary" type="submit">Zaloguj</button>
-      </div>
-    </form>
+
+    </div>
+
+    <!-- Additional Info -->
+    <div class="mt-6 text-center">
+      <p class="text-xs text-gray-500">
+        ShoperCenter © 2025 | Zarządzanie sklepami Shoper
+      </p>
+    </div>
+
   </div>
 </div>
-{% endblock %}
+
+</body>
+</html>

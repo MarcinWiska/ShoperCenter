@@ -1,71 +1,137 @@
 {% extends 'base.html' %}
 {% block title %}Moduły — ShoperCenter{% endblock %}
-{% block content %}
-<div class="flex justify-between items-center mb-4">
-  <h1 class="text-2xl font-semibold">Twoje moduły</h1>
-  <a class="btn btn-primary" href="{% url 'modules:add' %}">Nowy moduł</a>
-</div>
+{% block page_title %}Moduły{% endblock %}
+{% block page_subtitle %}Zarządzaj modułami sklepu i ich konfiguracją{% endblock %}
 
-<div class="overflow-x-auto">
-  <table class="table table-zebra w-full">
-    <thead>
-      <tr>
-        <th>Nazwa</th>
-        <th>Sklep</th>
-        <th>Resource</th>
-        <th>Akcje</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for m in modules %}
-      <tr>
-        <td>{{ m.name }}</td>
-        <td>{{ m.shop.name }}</td>
-        <td>{{ m.resource }}</td>
-        <td class="space-x-2">
-          <a class="btn btn-xs" href="{% url 'modules:detail' m.pk %}">Otwórz</a>
-          <button class="btn btn-xs" onclick="openModuleFieldsModal({{ m.pk }}, '{{ m.name|escapejs }}')">Atrybuty</button>
-        </td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="4">Brak modułów. Dodaj nowy.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% block content %}
+<div class="animate-fade-in">
+
+  <!-- Header with action -->
+  <div class="flex justify-between items-center mb-8">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center">
+        <i class="fas fa-puzzle-piece text-red-400 text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-white">Twoje moduły</h1>
+        <p class="text-sm text-gray-400 mt-1">Zarządzaj danymi i konfiguracją</p>
+      </div>
+    </div>
+    <a class="btn-primary" href="{% url 'modules:add' %}">
+      <i class="fas fa-plus"></i>
+      Nowy moduł
+    </a>
+  </div>
+
+  <!-- Modules Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for m in modules %}
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 card-hover">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center">
+              <i class="fas fa-database text-red-400"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">{{ m.name }}</h3>
+          </div>
+          <p class="text-sm text-gray-400 flex items-center gap-2">
+            <i class="fas fa-store text-gray-500 text-xs"></i>
+            {{ m.shop.name }}
+          </p>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <span class="badge badge-info">
+          <i class="fas fa-layer-group mr-1"></i>
+          {{ m.resource }}
+        </span>
+      </div>
+
+      <div class="flex gap-2">
+        <a class="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all text-center" href="{% url 'modules:detail' m.pk %}">
+          <i class="fas fa-folder-open mr-2"></i>Otwórz
+        </a>
+        <button class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-all border border-gray-700" onclick="openModuleFieldsModal({{ m.pk }}, '{{ m.name|escapejs }}')">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-12 border border-gray-800/50 text-center">
+      <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i class="fas fa-puzzle-piece text-gray-600 text-3xl"></i>
+      </div>
+      <h3 class="text-xl font-bold text-white mb-2">Brak modułów</h3>
+      <p class="text-gray-400 mb-6">Dodaj pierwszy moduł, aby rozpocząć zarządzanie danymi</p>
+      <a class="btn-primary" href="{% url 'modules:add' %}">
+        <i class="fas fa-plus"></i>
+        Dodaj pierwszy moduł
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+
 </div>
   
 <!-- Modal konfiguracji atrybutów z poziomu listy -->
 <input type="checkbox" id="module-fields-modal" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box max-w-5xl relative">
-    <label for="module-fields-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
-    <h3 class="font-bold text-lg mb-2">Konfiguracja atrybutów: <span id="mf-module-name" class="opacity-80"></span></h3>
-    <div id="mf-alert" class="hidden alert mb-3"></div>
-
-    <div class="flex items-center gap-2 mb-3">
-      <button class="btn btn-sm" onclick="mfSelectAll(true)">Zaznacz wszystkie</button>
-      <button class="btn btn-sm" onclick="mfSelectAll(false)">Odznacz wszystkie</button>
-      <button class="btn btn-sm btn-primary" onclick="mfSelectRecommended()">Zalecane</button>
+  <div class="modal-box max-w-5xl relative bg-gray-900 border border-gray-800">
+    <label for="module-fields-modal" class="btn btn-sm btn-circle absolute right-4 top-4 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+    
+    <div class="mb-6">
+      <h3 class="text-2xl font-bold text-white flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center">
+          <i class="fas fa-cog text-red-400"></i>
+        </div>
+        Konfiguracja atrybutów
+      </h3>
+      <p class="text-gray-400 ml-13"><span id="mf-module-name" class="text-red-400 font-semibold"></span></p>
     </div>
 
-    <div class="overflow-y-auto max-h-[60vh]">
+    <div id="mf-alert" class="hidden alert mb-4"></div>
+
+    <div class="flex items-center gap-2 mb-4">
+      <button class="btn-secondary text-sm" onclick="mfSelectAll(true)">
+        <i class="fas fa-check-double"></i>
+        Zaznacz wszystkie
+      </button>
+      <button class="btn-secondary text-sm" onclick="mfSelectAll(false)">
+        <i class="fas fa-times"></i>
+        Odznacz wszystkie
+      </button>
+      <button class="btn-primary text-sm" onclick="mfSelectRecommended()">
+        <i class="fas fa-star"></i>
+        Zalecane
+      </button>
+    </div>
+
+    <div class="overflow-y-auto max-h-[60vh] bg-gray-950 rounded-xl border border-gray-800">
       <table class="table w-full" id="mf-table">
-        <thead>
-          <tr>
-            <th>Widoczne</th>
-            <th>Klucz</th>
-            <th>Nazwa kolumny</th>
-            <th>Kategoria</th>
-            <th>Edytowalność</th>
+        <thead class="bg-gray-900 sticky top-0">
+          <tr class="text-gray-400 border-b border-gray-800">
+            <th class="font-semibold">Widoczne</th>
+            <th class="font-semibold">Klucz</th>
+            <th class="font-semibold">Nazwa kolumny</th>
+            <th class="font-semibold">Kategoria</th>
+            <th class="font-semibold">Edytowalność</th>
           </tr>
         </thead>
-        <tbody id="mf-tbody"></tbody>
+        <tbody id="mf-tbody" class="text-gray-300"></tbody>
       </table>
     </div>
 
-    <div class="modal-action">
-      <label for="module-fields-modal" class="btn">Anuluj</label>
-      <button class="btn btn-primary" onclick="saveModuleFields()">Zapisz</button>
+    <div class="modal-action mt-6">
+      <label for="module-fields-modal" class="btn-secondary">
+        <i class="fas fa-times"></i>
+        Anuluj
+      </label>
+      <button class="btn-primary" onclick="saveModuleFields()">
+        <i class="fas fa-save"></i>
+        Zapisz
+      </button>
     </div>
   </div>
   <label class="modal-backdrop" for="module-fields-modal">Zamknij</label>
@@ -114,11 +180,12 @@
     tbody.innerHTML = '';
     mfState.fields.forEach(key => {
       const tr = document.createElement('tr');
+      tr.className = 'border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors';
 
       const tdChk = document.createElement('td');
       const chk = document.createElement('input');
       chk.type = 'checkbox';
-      chk.className = 'checkbox';
+      chk.className = 'checkbox checkbox-error';
       chk.checked = mfState.selected.has(key);
       chk.dataset.key = key;
       chk.addEventListener('change', (e) => {
@@ -127,12 +194,12 @@
       tdChk.appendChild(chk);
 
       const tdKey = document.createElement('td');
-      tdKey.innerHTML = `<code class="text-xs">${key}</code>`;
+      tdKey.innerHTML = `<code class="text-xs bg-gray-800 px-2 py-1 rounded text-red-400">${key}</code>`;
 
       const tdLabel = document.createElement('td');
       const input = document.createElement('input');
       input.type = 'text';
-      input.className = 'input input-bordered w-full';
+      input.className = 'form-input text-sm w-full';
       const recInfo = mfState.recMap[key];
       const defaultLabel = recInfo && recInfo.label ? recInfo.label : key;
       input.value = defaultLabel;
@@ -140,20 +207,20 @@
       tdLabel.appendChild(input);
       if (recInfo) {
         const badge = document.createElement('span');
-        badge.className = 'badge badge-info badge-xs ml-2';
-        badge.textContent = 'zalecane';
+        badge.className = 'badge badge-info ml-2';
+        badge.innerHTML = '<i class="fas fa-star mr-1"></i>zalecane';
         tdLabel.appendChild(badge);
       }
 
       const tdCat = document.createElement('td');
-      tdCat.innerHTML = recInfo && recInfo.category ? `<span class="badge badge-outline badge-xs">${recInfo.category}</span>` : '<span class="text-xs opacity-60">API</span>';
+      tdCat.innerHTML = recInfo && recInfo.category ? `<span class="badge badge-outline">${recInfo.category}</span>` : '<span class="text-xs text-gray-500">API</span>';
 
       const tdEdit = document.createElement('td');
       if (mfState.resource === 'products') {
         const ro = mfState.nonEditable.has(key);
-        tdEdit.innerHTML = ro ? '<span class="badge badge-warning badge-xs">READONLY</span><div class="text-xs opacity-70 mt-1">Tylko do odczytu</div>' : '<span class="badge badge-success badge-xs">EDYTOWALNE</span><div class="text-xs opacity-70 mt-1">Można modyfikować</div>';
+        tdEdit.innerHTML = ro ? '<span class="badge badge-warning">READONLY</span><div class="text-xs text-gray-500 mt-1">Tylko do odczytu</div>' : '<span class="badge badge-success">EDYTOWALNE</span><div class="text-xs text-gray-500 mt-1">Można modyfikować</div>';
       } else {
-        tdEdit.innerHTML = '<span class="text-xs opacity-60">—</span>';
+        tdEdit.innerHTML = '<span class="text-xs text-gray-500">—</span>';
       }
 
       tr.appendChild(tdChk);

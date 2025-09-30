@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'accounts',
+    'dashboard',
     'shops',
     'modules',
     'seo_redirects',
@@ -132,7 +133,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 # Auth redirects
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'shops:list'
+LOGIN_REDIRECT_URL = 'dashboard:home'
 LOGOUT_REDIRECT_URL = 'login'
 
 # Logging configuration

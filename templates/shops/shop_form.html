@@ -1,30 +1,120 @@
 {% extends 'base.html' %}
-{% block title %}Sklep — ShoperCenter{% endblock %}
+{% block title %}{% if object %}Edytuj sklep{% else %}Dodaj sklep{% endif %} — ShoperCenter{% endblock %}
+{% block page_title %}{% if object %}Edytuj sklep{% else %}Dodaj sklep{% endif %}{% endblock %}
+{% block page_subtitle %}{% if object %}Zaktualizuj dane sklepu Shoper{% else %}Połącz nowy sklep Shoper z panelem{% endif %}{% endblock %}
+
 {% block content %}
-<div class="max-w-xl mx-auto card bg-base-100 shadow">
-  <div class="card-body">
-    <h1 class="card-title">{% if object %}Edytuj sklep{% else %}Dodaj sklep{% endif %}</h1>
-    <form method="post" class="space-y-4">
+<div class="animate-fade-in max-w-2xl mx-auto">
+  
+  <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl border border-gray-800/50 overflow-hidden">
+    
+    <!-- Header -->
+    <div class="bg-gray-900/50 border-b border-gray-800/50 px-8 py-6">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center">
+          <i class="fas fa-store text-red-400 text-xl"></i>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold text-white">{% if object %}Edycja sklepu{% else %}Nowy sklep{% endif %}</h2>
+          <p class="text-sm text-gray-400 mt-1">{% if object %}Zaktualizuj dane połączenia{% else %}Podaj dane połączenia API Shoper{% endif %}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="p-8">
       {% csrf_token %}
-      {{ form.non_field_errors }}
-      <div class="form-control">
-        <label class="label"><span class="label-text">Nazwa własna</span></label>
-        {{ form.name }}
+      
+      {% if form.non_field_errors %}
+      <div class="alert alert-error mb-6">
+        <i class="fas fa-exclamation-circle"></i>
+        <span>{{ form.non_field_errors }}</span>
       </div>
-      <div class="form-control">
-        <label class="label"><span class="label-text">Base URL API</span></label>
-        {{ form.base_url }}
+      {% endif %}
+
+      <div class="space-y-6">
+        
+        <!-- Nazwa -->
+        <div>
+          <label class="form-label">
+            <i class="fas fa-tag text-red-400 mr-2"></i>
+            Nazwa własna
+          </label>
+          {{ form.name }}
+          {% if form.name.errors %}
+            <p class="text-red-400 text-sm mt-1">{{ form.name.errors.0 }}</p>
+          {% endif %}
+          <p class="text-xs text-gray-500 mt-2">Przyjazna nazwa do identyfikacji sklepu w panelu</p>
+        </div>
+
+        <!-- Base URL -->
+        <div>
+          <label class="form-label">
+            <i class="fas fa-link text-red-400 mr-2"></i>
+            Base URL API
+          </label>
+          {{ form.base_url }}
+          {% if form.base_url.errors %}
+            <p class="text-red-400 text-sm mt-1">{{ form.base_url.errors.0 }}</p>
+          {% endif %}
+          <div class="bg-gray-950/50 rounded-lg p-4 mt-3 border border-gray-800/50">
+            <p class="text-xs text-gray-400 flex items-start">
+              <i class="fas fa-info-circle text-blue-400 mr-2 mt-0.5"></i>
+              <span>Adres API sklepu Shoper, np.: <code class="bg-gray-800 px-2 py-1 rounded text-red-400 mx-1">https://twojsklep.shoparena.pl/webapi/rest</code></span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Bearer Token -->
+        <div>
+          <label class="form-label">
+            <i class="fas fa-key text-red-400 mr-2"></i>
+            Bearer Token
+          </label>
+          {{ form.bearer_token }}
+          {% if form.bearer_token.errors %}
+            <p class="text-red-400 text-sm mt-1">{{ form.bearer_token.errors.0 }}</p>
+          {% endif %}
+          <div class="bg-gray-950/50 rounded-lg p-4 mt-3 border border-gray-800/50">
+            <p class="text-xs text-gray-400 flex items-start mb-2">
+              <i class="fas fa-shield-alt text-yellow-400 mr-2 mt-0.5"></i>
+              <span>Token autoryzacyjny z panelu Shoper (64 znaki)</span>
+            </p>
+            <p class="text-xs text-gray-500 ml-6">
+              Token znajdziesz w: <strong>Panel Shoper → Konfiguracja → API</strong>
+            </p>
+          </div>
+        </div>
+
       </div>
-      <div class="form-control">
-        <label class="label"><span class="label-text">Bearer Token</span></label>
-        {{ form.bearer_token }}
-      </div>
-      <div class="card-actions justify-end">
-        <a class="btn" href="{% url 'shops:list' %}">Anuluj</a>
-        <button class="btn btn-primary" type="submit">Zapisz</button>
+
+      <!-- Actions -->
+      <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-800/50">
+        <a class="btn-secondary" href="{% url 'shops:list' %}">
+          <i class="fas fa-times"></i>
+          Anuluj
+        </a>
+        <button class="btn-primary" type="submit">
+          <i class="fas fa-save"></i>
+          {% if object %}Zapisz zmiany{% else %}Dodaj sklep{% endif %}
+        </button>
       </div>
     </form>
+
   </div>
-  </div>
+
+</div>
+
+<style>
+  /* Style dla pól formularza Django */
+  form select,
+  form input[type="text"],
+  form input[type="url"],
+  form input[type="email"],
+  form input[type="password"],
+  form textarea {
+    @apply form-input w-full;
+  }
+</style>
 {% endblock %}
 

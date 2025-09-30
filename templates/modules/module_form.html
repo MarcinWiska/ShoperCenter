@@ -1,37 +1,131 @@
 {% extends 'base.html' %}
 {% block title %}Nowy moduł — ShoperCenter{% endblock %}
+{% block page_title %}Nowy moduł{% endblock %}
+{% block page_subtitle %}Skonfiguruj nowy moduł dla zarządzania danymi sklepu{% endblock %}
+
 {% block content %}
-<div class="max-w-2xl mx-auto card bg-base-100 shadow">
-  <div class="card-body">
-    <h1 class="card-title">Nowy moduł</h1>
-    <form method="post" class="space-y-4">
-      {% csrf_token %}
-      {{ form.non_field_errors }}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="label"><span class="label-text">Sklep</span></label>
-          {{ form.shop }}
+<div class="animate-fade-in max-w-3xl mx-auto">
+  
+  <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl border border-gray-800/50 overflow-hidden">
+    
+    <!-- Header -->
+    <div class="bg-gray-900/50 border-b border-gray-800/50 px-8 py-6">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center">
+          <i class="fas fa-puzzle-piece text-red-400 text-xl"></i>
         </div>
         <div>
-          <label class="label"><span class="label-text">Resource</span></label>
-          {{ form.resource }}
-        </div>
-        <div class="md:col-span-2">
-          <label class="label"><span class="label-text">Nazwa modułu</span></label>
-          {{ form.name }}
-        </div>
-        <div class="md:col-span-2">
-          <label class="label"><span class="label-text">Własny path API (opcjonalnie)</span></label>
-          {{ form.api_path_override }}
-          <div class="text-xs opacity-70 mt-1">Jeśli domyślny path nie działa, wpisz np. products, orders…</div>
+          <h2 class="text-xl font-bold text-white">Utwórz nowy moduł</h2>
+          <p class="text-sm text-gray-400 mt-1">Wybierz sklep i typ danych do zarządzania</p>
         </div>
       </div>
-      <div class="card-actions justify-end">
-        <a class="btn" href="{% url 'modules:list' %}">Anuluj</a>
-        <button class="btn btn-primary" type="submit">Utwórz</button>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="p-8">
+      {% csrf_token %}
+      
+      {% if form.non_field_errors %}
+      <div class="alert alert-error mb-6">
+        <i class="fas fa-exclamation-circle"></i>
+        <span>{{ form.non_field_errors }}</span>
+      </div>
+      {% endif %}
+
+      <div class="space-y-6">
+        
+        <!-- Sklep i Resource -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="form-label">
+              <i class="fas fa-store text-red-400 mr-2"></i>
+              Sklep
+            </label>
+            {{ form.shop }}
+            {% if form.shop.errors %}
+              <p class="text-red-400 text-sm mt-1">{{ form.shop.errors.0 }}</p>
+            {% endif %}
+          </div>
+          
+          <div>
+            <label class="form-label">
+              <i class="fas fa-database text-red-400 mr-2"></i>
+              Resource
+            </label>
+            {{ form.resource }}
+            {% if form.resource.errors %}
+              <p class="text-red-400 text-sm mt-1">{{ form.resource.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Nazwa modułu -->
+        <div>
+          <label class="form-label">
+            <i class="fas fa-tag text-red-400 mr-2"></i>
+            Nazwa modułu
+          </label>
+          {{ form.name }}
+          {% if form.name.errors %}
+            <p class="text-red-400 text-sm mt-1">{{ form.name.errors.0 }}</p>
+          {% endif %}
+          <p class="text-xs text-gray-500 mt-2">Przyjazna nazwa do identyfikacji modułu</p>
+        </div>
+
+        <!-- API Path Override -->
+        <div>
+          <label class="form-label">
+            <i class="fas fa-route text-red-400 mr-2"></i>
+            Własny path API (opcjonalnie)
+          </label>
+          {{ form.api_path_override }}
+          {% if form.api_path_override.errors %}
+            <p class="text-red-400 text-sm mt-1">{{ form.api_path_override.errors.0 }}</p>
+          {% endif %}
+          <div class="bg-gray-950/50 rounded-lg p-4 mt-3 border border-gray-800/50">
+            <p class="text-xs text-gray-400 flex items-start">
+              <i class="fas fa-info-circle text-blue-400 mr-2 mt-0.5"></i>
+              <span>Jeśli domyślny path nie działa, możesz podać własny, np.: <code class="bg-gray-800 px-2 py-1 rounded text-red-400 mx-1">products</code>, <code class="bg-gray-800 px-2 py-1 rounded text-red-400 mx-1">orders</code></span>
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Actions -->
+      <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-800/50">
+        <a class="btn-secondary" href="{% url 'modules:list' %}">
+          <i class="fas fa-times"></i>
+          Anuluj
+        </a>
+        <button class="btn-primary" type="submit">
+          <i class="fas fa-check"></i>
+          Utwórz moduł
+        </button>
       </div>
     </form>
+
   </div>
+
 </div>
+
+<style>
+  /* Style dla pól formularza Django */
+  form select,
+  form input[type="text"],
+  form input[type="email"],
+  form input[type="password"],
+  form textarea {
+    @apply form-input w-full;
+  }
+  
+  form select {
+    @apply form-select;
+  }
+  
+  form textarea {
+    @apply form-textarea;
+  }
+</style>
 {% endblock %}
 
