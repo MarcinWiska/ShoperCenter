@@ -1,3 +1,5 @@
+from typing import Any, Dict, List
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -116,32 +118,24 @@ def pull_redirects(request, shop_id: int):
     skipped = 0
     found = len(items)
     for it in items:
-        source, target, code, rid = parse_remote_redirect(it)
-        if not source or not target:
-            # Try to derive target from object type/id if missing
-            t_raw = it.get('type') or it.get('object_type')
-            t = (str(t_raw).lower() if t_raw is not None else '')
-            obj_id = it.get('object_id') or it.get('objectId')
-            try:
-                obj_id = int(obj_id) if obj_id is not None else None
-            except Exception:
-                obj_id = None
-            if not target and obj_id:
-                guess = None
-                if 'prod' in t:
-                    guess = guess_product_path(shop, obj_id)
-                elif 'cat' in t:
-                    guess = guess_category_path(shop, obj_id)
-                else:
-                    # Try both
-                    guess = guess_product_path(shop, obj_id)
-                    if not guess or guess.startswith('/product/'):
-                        guess = guess_category_path(shop, obj_id)
-                target = guess
-            # If nadal brak kluczowych danych – pomiń
-            if not source or not target:
-                skipped += 1
-                continue
+        source, target, code, rid, target_type, target_object_id = parse_remote_redirect(it)
+        if not source:
+            skipped += 1
+            continue
+
+        if target_type is not None and target_type < 0:
+            target_type = None
+
+        # Fallbacks dla docelowych ścieżek
+        if (not target or target in {'', '/product/', '/category/'}):
+            if target_type == RedirectRule.TargetType.PRODUCT and target_object_id:
+                target = guess_product_path(shop, target_object_id)
+            elif target_type == RedirectRule.TargetType.CATEGORY and target_object_id:
+                target = guess_category_path(shop, target_object_id)
+
+        if not target:
+            skipped += 1
+            continue
         # Normalize paths
         nsrc = _norm_path(source)
         ntgt = _norm_path(target)
@@ -182,33 +176,57 @@ def pull_redirects(request, shop_id: int):
             ).first()
         if rule:
             # update
-            changed = False
+            changed_fields: List[str] = []
             if code and rule.status_code != code:
                 rule.status_code = code
-                changed = True
+                changed_fields.append('status_code')
             if rid and rule.remote_id != rid:
                 rule.remote_id = rid
-                changed = True
-            if changed:
-                rule.save(update_fields=['status_code', 'remote_id'])
+                changed_fields.append('remote_id')
+            if target_type is not None and rule.target_type != target_type:
+                rule.target_type = target_type
+                changed_fields.append('target_type')
+            if rule.target_object_id != target_object_id:
+                rule.target_object_id = target_object_id
+                changed_fields.append('target_object_id')
+            # Keep legacy helpers in sync for UI
+            if target_type == RedirectRule.TargetType.PRODUCT:
+                if target_object_id and rule.product_id != target_object_id:
+                    rule.product_id = target_object_id
+                    changed_fields.append('product_id')
+                if rule.rule_type != RedirectRule.RuleType.PRODUCT_TO_URL:
+                    rule.rule_type = RedirectRule.RuleType.PRODUCT_TO_URL
+                    changed_fields.append('rule_type')
+            elif target_type == RedirectRule.TargetType.CATEGORY:
+                if target_object_id and rule.category_id != target_object_id:
+                    rule.category_id = target_object_id
+                    changed_fields.append('category_id')
+                if rule.rule_type != RedirectRule.RuleType.CATEGORY_TO_URL:
+                    rule.rule_type = RedirectRule.RuleType.CATEGORY_TO_URL
+                    changed_fields.append('rule_type')
+            else:
+                if rule.rule_type != RedirectRule.RuleType.URL_TO_URL:
+                    rule.rule_type = RedirectRule.RuleType.URL_TO_URL
+                    changed_fields.append('rule_type')
+            if rule.target_url != ntgt:
+                rule.target_url = ntgt
+                changed_fields.append('target_url')
+            if changed_fields:
+                rule.save(update_fields=list(dict.fromkeys(changed_fields)))
                 updated += 1
         else:
-            # Infer rule type from item
-            t = str(it.get('type') or it.get('object_type') or '').lower()
-            obj_id = it.get('object_id') or it.get('objectId')
+            # Infer rule type from Shoper target type
             rule_type = RedirectRule.RuleType.URL_TO_URL
-            extra = {}
-            try:
-                if obj_id is not None:
-                    obj_id = int(obj_id)
-            except Exception:
-                obj_id = None
-            if 'product' in t and obj_id:
+            extra: Dict[str, Any] = {
+                'target_type': target_type or RedirectRule.TargetType.OWN,
+                'target_object_id': target_object_id,
+            }
+            if target_type == RedirectRule.TargetType.PRODUCT and target_object_id:
                 rule_type = RedirectRule.RuleType.PRODUCT_TO_URL
-                extra['product_id'] = obj_id
-            elif 'category' in t and obj_id:
+                extra['product_id'] = target_object_id
+            elif target_type == RedirectRule.TargetType.CATEGORY and target_object_id:
                 rule_type = RedirectRule.RuleType.CATEGORY_TO_URL
-                extra['category_id'] = obj_id
+                extra['category_id'] = target_object_id
 
             RedirectRule.objects.create(
                 owner=request.user,

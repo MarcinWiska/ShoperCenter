@@ -14,25 +14,765 @@
 </div>
 
 <div class="overflow-x-auto">
-  <table class="table table-zebra w-full">
-    <thead>
-      <tr>
-        {% for col in columns %}
-          <th>{{ col.label }}</th>
-        {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
+  {% if module.resource == 'products' %}
+    <!-- Spreadsheet-like grid for products -->
+    <div class="mb-3 flex items-center gap-2">
+      <button id="bulkSyncBtn" class="btn btn-primary btn-sm">
+        <i class="fas fa-sync mr-2"></i>
+        Zapisz zmiany (<span id="unsavedCount">0</span>)
+      </button>
+      <button id="refreshGridBtn" class="btn btn-sm">
+        <i class="fas fa-rotate mr-2"></i>
+        Odśwież
+      </button>
+      <span class="text-xs opacity-70">Dwuklik aby edytować komórkę. Pola oznaczone jako readonly są zablokowane.</span>
+    </div>
+
+    <!-- Tabulator container -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+    <div id="productGrid" class="w-full"></div>
+    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <script>
+      // Track unsaved changes per item_id -> { key: newValue }
+      const changedMap = new Map();
+      let originalSnapshot = new Map(); // item_id -> { key: value }
+      let editableKeys = [];
+
+      function getChangedCount() {
+        let count = 0;
+        changedMap.forEach(ch => { count += Object.keys(ch).length; });
+        return count;
+      }
+
+      function updateUnsavedUI() {
+        const c = getChangedCount();
+        document.getElementById('unsavedCount').textContent = c;
+      }
+
+      async function loadGridData() {
+        const resp = await fetch(`/modules/{{ module.pk }}/data.json?limit=200`, { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd pobierania danych');
+
+        // Build Tabulator columns; use custom nestedFieldSeparator so dotted keys are literal
+        editableKeys = [];
+        const cols = (data.columns || []).map(c => {
+          const base = { title: c.label || c.key, field: c.key, headerHozAlign: 'left' };
+          if (c.type === 'bool') {
+            base.formatter = 'tickCross';
+            base.hozAlign = 'center';
+            base.editor = c.editable ? 'tickCross' : false;
+          } else if (c.type === 'number') {
+            base.hozAlign = 'right';
+            base.editor = c.editable ? 'number' : false;
+          } else {
+            base.editor = c.editable ? 'input' : false;
+          }
+          if (c.editable) editableKeys.push(c.key);
+          return base;
+        });
+
+        // Actions column
+        cols.push({
+          title: 'Akcje', field: '__actions', width: 320, minWidth: 280, headerSort: false, hozAlign: 'left', formatter: (cell) => {
+            const d = cell.getRow().getData();
+            const id = d.item_id;
+            if (!id) return '<span class="opacity-50 text-xs">Brak ID</span>';
+            return `
+              <button class="btn btn-xs mr-1" onclick="openProductEditModal({{ module.pk }}, ${id})">Edytuj</button>
+              <button class="btn btn-xs mr-1" onclick="openProductRedirectModal({{ module.pk }}, ${id})">Przekierowanie</button>
+              <button class="btn btn-xs mr-1" onclick="openProductPromoModal({{ module.pk }}, ${id})">Promocja</button>
+              <button class="btn btn-xs" onclick="openProductDuplicateModal({{ module.pk }}, ${id})">Duplikuj</button>
+            `;
+          }
+        });
+
+        // Create grid
+        const grid = new Tabulator('#productGrid', {
+          data: data.rows || [],
+          columns: cols,
+          layout: 'fitData',
+          height: '70vh',
+          reactiveData: false,
+          persistenceMode: true,
+          nestedFieldSeparator: '~~', // treat dotted keys as literal
+          clipboard: true,
+          columnDefaults: { tooltip: true },
+          cellEdited: function(cell){
+            const row = cell.getRow().getData();
+            const field = cell.getField(); // dotted key
+            const oldVal = cell.getOldValue();
+            const newVal = cell.getValue();
+            const id = row.item_id;
+            if (!id) return;
+            // Only record if value actually changed
+            if (String(oldVal) !== String(newVal)) {
+              const rowChanges = changedMap.get(id) || {};
+              rowChanges[field] = newVal;
+              changedMap.set(id, rowChanges);
+            } else {
+              const rowChanges = changedMap.get(id);
+              if (rowChanges) {
+                delete rowChanges[field];
+                if (Object.keys(rowChanges).length === 0) changedMap.delete(id); else changedMap.set(id, rowChanges);
+              }
+            }
+            updateUnsavedUI();
+          }
+        });
+
+        // Expose for refresh
+        window.__productGrid = grid;
+
+        // Build original snapshot for diff fallback (only editable fields)
+        originalSnapshot = new Map();
+        (data.rows || []).forEach(r => {
+          const id = r.item_id;
+          if (!id) return;
+          const snap = {};
+          editableKeys.forEach(k => { snap[k] = r[k]; });
+          originalSnapshot.set(id, snap);
+        });
+      }
+
+      document.getElementById('refreshGridBtn').addEventListener('click', async () => {
+        try {
+          changedMap.clear();
+          updateUnsavedUI();
+          await loadGridData();
+        } catch (e) {
+          alert(e.message || 'Błąd odświeżania');
+        }
+      });
+
+      document.getElementById('bulkSyncBtn').addEventListener('click', async () => {
+        let rows = [];
+        changedMap.forEach((changes, itemId) => { rows.push({ item_id: itemId, changes }); });
+
+        // Fallback: if no tracked changes (event missed), diff current data with snapshot
+        if (rows.length === 0 && window.__productGrid) {
+          const current = window.__productGrid.getData() || [];
+          current.forEach(r => {
+            const id = r.item_id;
+            if (!id) return;
+            const snap = originalSnapshot.get(id) || {};
+            const changes = {};
+            editableKeys.forEach(k => {
+              const a = snap[k];
+              const b = r[k];
+              if (String(a) !== String(b)) changes[k] = b;
+            });
+            if (Object.keys(changes).length) rows.push({ item_id: id, changes });
+          });
+          // Reflect recomputed changes in changedMap and UI
+          changedMap.clear();
+          rows.forEach(rec => changedMap.set(rec.item_id, rec.changes));
+          updateUnsavedUI();
+        }
+
+        if (rows.length === 0) {
+          alert('Brak zmian do zapisania.');
+          return;
+        }
+        try {
+          const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+          const resp = await fetch(`/modules/{{ module.pk }}/products/bulk_update.json`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ rows })
+          });
+          const data = await resp.json();
+          if (!data.ok) throw new Error(data.error || 'Błąd synchronizacji');
+          const msg = `Zaktualizowano: ${data.updated}, błędów: ${data.failed}`;
+          alert(msg);
+          // Clear changes and refresh to show latest values
+          changedMap.clear();
+          updateUnsavedUI();
+          document.getElementById('refreshGridBtn').click();
+        } catch (e) {
+          alert(e.message || 'Błąd synchronizacji');
+        }
+      });
+
+      // Initial load
+      (async () => {
+        try { await loadGridData(); } catch (e) { alert(e.message || 'Błąd ładowania'); }
+      })();
+    </script>
+  {% else %}
+    <table class="table table-zebra w-full">
+      <thead>
         <tr>
           {% for col in columns %}
-            <td>{{ row|dotget:col.key }}</td>
+            <th>{{ col.label }}</th>
           {% endfor %}
         </tr>
-      {% empty %}
-        <tr><td colspan="{{ columns|length }}">Brak danych do wyświetlenia.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            {% for col in columns %}
+              <td>{{ row|dotget:col.key }}</td>
+            {% endfor %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="{{ columns|length }}">Brak danych do wyświetlenia.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
 </div>
+
+{% if module.resource == 'products' %}
+  <!-- Modal toggle -->
+  <input type="checkbox" id="product-edit-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box max-w-3xl relative">
+      <label for="product-edit-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-4">Edytuj produkt <span id="pem-id" class="opacity-60"></span></h3>
+      <div id="pem-alert" class="hidden alert mb-3"></div>
+      <form id="product-edit-form" class="space-y-4" onsubmit="return saveProductEdit(event)">
+        <div id="pem-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        <div class="modal-action">
+          <label for="product-edit-modal" class="btn">Anuluj</label>
+          <button class="btn btn-primary" type="submit">Zapisz</button>
+        </div>
+      </form>
+    </div>
+    <label class="modal-backdrop" for="product-edit-modal">Zamknij</label>
+  </div>
+
+  <script>
+    let pemState = { modulePk: null, itemId: null, editable: [] };
+
+    function closeProductEditModal() {
+      const cb = document.getElementById('product-edit-modal');
+      if (cb) cb.checked = false;
+    }
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    async function openProductEditModal(modulePk, itemId) {
+      pemState = { modulePk, itemId, editable: [] };
+      document.getElementById('pem-id').textContent = `#${itemId}`;
+      const alertBox = document.getElementById('pem-alert');
+      alertBox.className = 'hidden alert mb-3';
+      alertBox.textContent = '';
+      document.getElementById('pem-fields').innerHTML = '<div class="opacity-60">Ładowanie…</div>';
+      document.getElementById('product-edit-modal').checked = true;
+      try {
+        const resp = await fetch(`/modules/${modulePk}/products/${itemId}/edit.json`, { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd pobierania danych');
+        pemState.editable = data.editable || [];
+        renderPemFields();
+      } catch (e) {
+        showPemError(e.message || 'Błąd ładowania.');
+      }
+    }
+
+    function renderPemFields() {
+      const wrap = document.getElementById('pem-fields');
+      wrap.innerHTML = '';
+      
+      let editableCount = 0;
+      let readonlyCount = 0;
+      
+      pemState.editable.forEach(f => {
+        if (f.editable !== false) editableCount++;
+        else readonlyCount++;
+        
+        const div = document.createElement('div');
+        div.className = 'form-control';
+        const label = document.createElement('label');
+        label.className = 'label';
+        
+        let editabilityBadge = '';
+        if (f.editable === false) {
+          editabilityBadge = '<span class="badge badge-warning badge-xs ml-1">readonly</span>';
+        }
+        
+        label.innerHTML = `<span class="label-text">${f.label} <span class="text-xs opacity-60">(${f.key})</span>${editabilityBadge}</span>`;
+        div.appendChild(label);
+        let input;
+        if (f.type === 'bool') {
+          const labelWrapper = document.createElement('label');
+          labelWrapper.className = 'cursor-pointer label justify-start';
+          input = document.createElement('input');
+          input.type = 'checkbox';
+          input.className = 'toggle toggle-primary mr-2';
+          input.checked = !!f.value;
+          // Set common attributes for bool here to avoid scoping issues
+          input.name = `field__${f.key}`;
+          input.dataset.key = f.key;
+          input.dataset.type = f.type;
+          input.dataset.orig = f.value;
+          if (f.editable === false) {
+            input.disabled = true;
+          }
+          const span = document.createElement('span');
+          span.className = 'label-text';
+          span.textContent = f.value ? 'Tak' : 'Nie';
+          labelWrapper.appendChild(input);
+          labelWrapper.appendChild(span);
+          div.appendChild(labelWrapper);
+        } else if (f.type === 'number') {
+          input = document.createElement('input');
+          input.type = 'number';
+          input.step = 'any';
+          input.value = (f.value ?? '').toString();
+          input.className = 'input input-bordered w-full';
+          div.appendChild(input);
+        } else {
+          input = document.createElement('input');
+          input.type = 'text';
+          input.value = (f.value ?? '').toString();
+          input.className = 'input input-bordered w-full';
+          div.appendChild(input);
+        }
+        // For non-bool inputs, set dataset and state here
+        if (f.type !== 'bool') {
+          input.name = `field__${f.key}`;
+          input.dataset.key = f.key;
+          input.dataset.type = f.type;
+          input.dataset.orig = f.value;
+          if (f.editable === false) {
+            input.disabled = true;
+            input.className += ' input-disabled';
+          }
+        }
+        
+        if (f.editable === false) {
+          const hint = document.createElement('div');
+          hint.className = 'text-xs opacity-70 mt-1';
+          hint.innerHTML = '<span class="text-warning">⚠</span> To pole nie jest edytowalne zgodnie z API Shopera';
+          div.appendChild(hint);
+        }
+        wrap.appendChild(div);
+      });
+      
+      // Dodaj informację o statystykach edytowalności
+      if (editableCount > 0 || readonlyCount > 0) {
+        const statsDiv = document.createElement('div');
+        statsDiv.className = 'col-span-full mt-2 p-2 bg-base-200 rounded';
+        statsDiv.innerHTML = `
+          <div class="text-xs opacity-70">
+            <span class="badge badge-success badge-xs">${editableCount} edytowalnych</span>
+            <span class="badge badge-warning badge-xs ml-1">${readonlyCount} readonly</span>
+          </div>
+        `;
+        wrap.appendChild(statsDiv);
+      }
+    }
+
+    function showPemError(msg) {
+      const alertBox = document.getElementById('pem-alert');
+      alertBox.className = 'alert alert-error mb-3';
+      alertBox.textContent = msg;
+    }
+
+    function showPemSuccess(msg) {
+      const alertBox = document.getElementById('pem-alert');
+      alertBox.className = 'alert alert-success mb-3';
+      alertBox.textContent = msg;
+    }
+
+    async function saveProductEdit(ev) {
+      ev.preventDefault();
+      const changes = {};
+      const inputs = document.querySelectorAll('#pem-fields [data-key]');
+      inputs.forEach(inp => {
+        const key = inp.dataset.key;
+        const type = inp.dataset.type;
+        const orig = inp.dataset.orig;
+        if (inp.disabled) return; // skip non-editable
+        let val;
+        if (type === 'bool') {
+          val = inp.checked;
+        } else {
+          val = inp.value;
+        }
+        // Compare as string to detect change; server will coerce types
+        if ((val === true || val === false) ? (String(val) !== String(orig)) : (String(val ?? '') !== String(orig ?? ''))) {
+          changes[key] = val;
+        }
+      });
+
+      if (Object.keys(changes).length === 0) {
+        showPemSuccess('Brak zmian.');
+        return false;
+      }
+
+      try {
+        const csrftoken = getCookie('csrftoken');
+        const resp = await fetch(`/modules/${pemState.modulePk}/products/${pemState.itemId}/edit.json`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRFToken': csrftoken || ''
+          },
+          body: JSON.stringify({ changes })
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd zapisu');
+        showPemSuccess('Zapisano zmiany. Odśwież stronę aby zobaczyć aktualne dane.');
+      } catch (e) {
+        showPemError(e.message || 'Błąd zapisu.');
+      }
+      return false;
+    }
+
+    // Zamykaj modal klawiszem Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeProductEditModal();
+      }
+    });
+  </script>
+{% endif %}
+{% if module.resource == 'products' %}
+  <!-- Redirect modal -->
+  <input type="checkbox" id="redirect-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box max-w-md relative">
+      <label for="redirect-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2">Utwórz przekierowanie → produkt <span id="rm-id" class="opacity-60"></span></h3>
+      <div id="rm-alert" class="hidden alert mb-3"></div>
+      <form id="redirect-form" onsubmit="return saveProductRedirect(event)">
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Źródłowy URL (np. /stara-strona)</span></label>
+          <input type="text" id="rm-source" class="input input-bordered w-full" placeholder="/stara-strona" />
+        </div>
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Kod HTTP</span></label>
+          <select id="rm-code" class="select select-bordered w-full">
+            <option value="301" selected>301 Moved Permanently</option>
+            <option value="302">302 Found (Temporary)</option>
+          </select>
+        </div>
+        <div class="text-xs opacity-70 mb-3">Docelowy: <code id="rm-target" class="break-all"></code></div>
+        <div class="modal-action">
+          <label for="redirect-modal" class="btn">Anuluj</label>
+          <button class="btn btn-primary" type="submit">Utwórz</button>
+        </div>
+      </form>
+    </div>
+    <label class="modal-backdrop" for="redirect-modal">Zamknij</label>
+  </div>
+  <script>
+    let rmState = { modulePk: null, itemId: null };
+    function closeRedirectModal() {
+      const cb = document.getElementById('redirect-modal');
+      if (cb) cb.checked = false;
+    }
+    async function openProductRedirectModal(modulePk, itemId) {
+      rmState = { modulePk, itemId };
+      document.getElementById('rm-id').textContent = `#${itemId}`;
+      document.getElementById('rm-source').value = '';
+      document.getElementById('rm-code').value = '301';
+      const alertBox = document.getElementById('rm-alert');
+      alertBox.className = 'hidden alert mb-3';
+      alertBox.textContent = '';
+      document.getElementById('rm-target').textContent = '';
+      document.getElementById('redirect-modal').checked = true;
+      try {
+        const resp = await fetch(`/modules/${modulePk}/products/${itemId}/redirect.json`, { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd pobierania');
+        if (data.target_preview) {
+          document.getElementById('rm-target').textContent = data.target_preview;
+        }
+        if (data.default_code) {
+          document.getElementById('rm-code').value = String(data.default_code);
+        }
+      } catch (e) {
+        const alertBox2 = document.getElementById('rm-alert');
+        alertBox2.className = 'alert alert-error mb-3';
+        alertBox2.textContent = e.message || 'Błąd ładowania.';
+      }
+    }
+    function showRmError(msg) {
+      const alertBox = document.getElementById('rm-alert');
+      alertBox.className = 'alert alert-error mb-3';
+      alertBox.textContent = msg;
+    }
+    function showRmSuccess(msg) {
+      const alertBox = document.getElementById('rm-alert');
+      alertBox.className = 'alert alert-success mb-3';
+      alertBox.textContent = msg;
+    }
+    async function saveProductRedirect(ev) {
+      ev.preventDefault();
+      const source = document.getElementById('rm-source').value.trim();
+      const code = parseInt(document.getElementById('rm-code').value, 10) || 301;
+      if (!source) {
+        showRmError('Podaj źródłowy URL.');
+        return false;
+      }
+      try {
+        const csrftoken = getCookie('csrftoken');
+        const resp = await fetch(`/modules/${rmState.modulePk}/products/${rmState.itemId}/redirect.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrftoken || '' },
+          body: JSON.stringify({ source_url: source, code })
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd zapisu');
+        showRmSuccess('Utworzono przekierowanie.');
+        setTimeout(() => { closeRedirectModal(); }, 800);
+      } catch (e) {
+        showRmError(e.message || 'Błąd zapisu.');
+      }
+      return false;
+    }
+    // Escape closes modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeRedirectModal();
+    });
+  </script>
+{% endif %}
+{% if module.resource == 'products' %}
+  <!-- Promotion modal -->
+  <input type="checkbox" id="promo-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box max-w-md relative">
+      <label for="promo-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2">Utwórz promocję → produkt <span id="pm-id" class="opacity-60"></span></h3>
+      <div id="pm-alert" class="hidden alert mb-3"></div>
+      <form id="promo-form" onsubmit="return saveProductPromo(event)">
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Typ promocji</span></label>
+          <div class="flex gap-4">
+            <label class="cursor-pointer flex items-center gap-2">
+              <input type="radio" name="pm-mode" value="amount" class="radio radio-sm" checked />
+              <span>Kwotowa (PLN)</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-2">
+              <input type="radio" name="pm-mode" value="percent" class="radio radio-sm" />
+              <span>Procentowa (%)</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Wartość</span></label>
+          <input type="number" id="pm-value" class="input input-bordered w-full" step="0.01" placeholder="np. 10" />
+          <div class="text-xs opacity-70 mt-1">Dla trybu procentowego podaj procent (np. 10 = 10%).</div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Data od</span></label>
+            <input type="datetime-local" id="pm-from" class="input input-bordered w-full" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Data do</span></label>
+            <input type="datetime-local" id="pm-to" class="input input-bordered w-full" />
+          </div>
+        </div>
+        <div class="text-xs opacity-70 mt-2">Cena bazowa: <span id="pm-base-price" class="font-mono"></span></div>
+        <div class="modal-action">
+          <label for="promo-modal" class="btn">Anuluj</label>
+          <button class="btn btn-primary" type="submit">Utwórz promocję</button>
+        </div>
+      </form>
+    </div>
+    <label class="modal-backdrop" for="promo-modal">Zamknij</label>
+  </div>
+  <script>
+    let pmState = { modulePk: null, itemId: null, basePrice: null };
+    function closePromoModal() {
+      const cb = document.getElementById('promo-modal');
+      if (cb) cb.checked = false;
+    }
+    function showPmError(msg) {
+      const alertBox = document.getElementById('pm-alert');
+      alertBox.className = 'alert alert-error mb-3';
+      alertBox.textContent = msg;
+    }
+    function showPmSuccess(msg) {
+      const alertBox = document.getElementById('pm-alert');
+      alertBox.className = 'alert alert-success mb-3';
+      alertBox.textContent = msg;
+    }
+    async function openProductPromoModal(modulePk, itemId) {
+      pmState = { modulePk, itemId, basePrice: null };
+      document.getElementById('pm-id').textContent = `#${itemId}`;
+      document.getElementById('pm-alert').className = 'hidden alert mb-3';
+      document.getElementById('pm-alert').textContent = '';
+      document.getElementById('promo-modal').checked = true;
+      try {
+        const resp = await fetch(`/modules/${modulePk}/products/${itemId}/promo.json`, { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd pobierania');
+        pmState.basePrice = data.base_price || null;
+        document.getElementById('pm-base-price').textContent = (pmState.basePrice != null ? String(pmState.basePrice) + ' PLN' : 'brak');
+        // Prefill datetimes
+        // Convert default_from/_to (YYYY-MM-DD HH:MM:SS) to input type datetime-local (YYYY-MM-DDTHH:MM)
+        const toLocal = (s) => s ? s.replace(' ', 'T').slice(0,16) : '';
+        document.getElementById('pm-from').value = toLocal(data.default_from || '');
+        document.getElementById('pm-to').value = toLocal(data.default_to || '');
+        // Reset value and mode
+        document.getElementById('pm-value').value = '';
+        document.querySelector('input[name="pm-mode"][value="amount"]').checked = true;
+      } catch (e) {
+        showPmError(e.message || 'Błąd ładowania.');
+      }
+    }
+    async function saveProductPromo(ev) {
+      ev.preventDefault();
+      const mode = (document.querySelector('input[name="pm-mode"]:checked') || {}).value || 'amount';
+      const valRaw = document.getElementById('pm-value').value;
+      const value = parseFloat(valRaw.replace(',', '.')) || 0;
+      const from = document.getElementById('pm-from').value; // YYYY-MM-DDTHH:MM
+      const to = document.getElementById('pm-to').value;
+      // Convert to API format YYYY-MM-DD HH:MM:SS
+      const toApi = (s) => s ? (s.replace('T', ' ') + (s.length === 16 ? ':00' : '')) : '';
+      try {
+        const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+        const resp = await fetch(`/modules/${pmState.modulePk}/products/${pmState.itemId}/promo.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrftoken },
+          body: JSON.stringify({ mode, value, date_from: toApi(from), date_to: toApi(to) })
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd zapisu');
+        showPmSuccess('Promocja utworzona.');
+        setTimeout(() => { closePromoModal(); }, 800);
+      } catch (e) {
+        showPmError(e.message || 'Błąd zapisu.');
+      }
+      return false;
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePromoModal(); });
+  </script>
+{% endif %}
+{% if module.resource == 'products' %}
+  <!-- Duplicate modal -->
+  <input type="checkbox" id="duplicate-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box max-w-md relative">
+      <label for="duplicate-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2">Duplikuj produkt <span id="dup-id" class="opacity-60"></span></h3>
+      <div id="dup-alert" class="hidden alert mb-3"></div>
+      <form id="duplicate-form" onsubmit="return saveProductDuplicate(event)">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Ile kopii</span></label>
+            <input type="number" id="dup-count" min="1" max="50" value="2" class="input input-bordered w-full" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Dodaj indeks</span></label>
+            <label class="cursor-pointer flex items-center gap-2">
+              <input type="checkbox" id="dup-add-index" class="checkbox checkbox-sm" checked />
+              <span class="text-sm">-1, -2, ...</span>
+            </label>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Prefiks kodu</span></label>
+            <input type="text" id="dup-prefix" class="input input-bordered w-full" placeholder="np. NEW-" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Sufiks kodu</span></label>
+            <input type="text" id="dup-suffix" class="input input-bordered w-full" placeholder="np. -COPY" />
+          </div>
+        </div>
+        <div class="form-control mt-2">
+          <label class="cursor-pointer flex items-center gap-2">
+            <input type="checkbox" id="dup-bump-name" class="checkbox checkbox-sm" checked />
+            <span class="text-sm">Dodaj indeks do nazwy</span>
+          </label>
+        </div>
+        <div class="text-xs opacity-70 mt-1">Bazowy kod: <span id="dup-base-code" class="font-mono"></span></div>
+        <div class="text-xs opacity-70">Podgląd nowego kodu: <span id="dup-preview" class="font-mono"></span></div>
+        <div class="modal-action">
+          <label for="duplicate-modal" class="btn">Anuluj</label>
+          <button class="btn btn-primary" type="submit">Duplikuj</button>
+        </div>
+      </form>
+    </div>
+    <label class="modal-backdrop" for="duplicate-modal">Zamknij</label>
+  </div>
+  <script>
+    let dupState = { modulePk: null, itemId: null, baseCode: '' };
+    function closeDuplicateModal() { const cb = document.getElementById('duplicate-modal'); if (cb) cb.checked = false; }
+    function showDupError(msg) { const el = document.getElementById('dup-alert'); el.className = 'alert alert-error mb-3'; el.textContent = msg; }
+    function showDupSuccess(msg) { const el = document.getElementById('dup-alert'); el.className = 'alert alert-success mb-3'; el.textContent = msg; }
+    function updateDupPreview() {
+      const prefix = document.getElementById('dup-prefix').value || '';
+      const suffix = document.getElementById('dup-suffix').value || '';
+      const addIdx = document.getElementById('dup-add-index').checked;
+      const firstIdx = 1;
+      const idx = addIdx ? '-' + firstIdx : '';
+      const base = dupState.baseCode || 'prod';
+      document.getElementById('dup-preview').textContent = `${prefix}${base}${suffix}${idx}`;
+    }
+    async function openProductDuplicateModal(modulePk, itemId) {
+      dupState = { modulePk, itemId, baseCode: '' };
+      document.getElementById('dup-id').textContent = `#${itemId}`;
+      document.getElementById('dup-alert').className = 'hidden alert mb-3';
+      document.getElementById('dup-alert').textContent = '';
+      document.getElementById('duplicate-modal').checked = true;
+      try {
+        const resp = await fetch(`/modules/${modulePk}/products/${itemId}/duplicate.json`, { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd pobierania');
+        dupState.baseCode = data.base_code || '';
+        document.getElementById('dup-base-code').textContent = dupState.baseCode || '(brak)';
+        // defaults
+        document.getElementById('dup-count').value = (data.defaults && data.defaults.count) || 2;
+        document.getElementById('dup-prefix').value = (data.defaults && data.defaults.code_prefix) || '';
+        document.getElementById('dup-suffix').value = (data.defaults && data.defaults.code_suffix) || '-copy';
+        document.getElementById('dup-add-index').checked = (data.defaults && data.defaults.add_index) !== false;
+        document.getElementById('dup-bump-name').checked = (data.defaults && data.defaults.bump_name) !== false;
+        updateDupPreview();
+      } catch (e) {
+        showDupError(e.message || 'Błąd ładowania.');
+      }
+    }
+    ['dup-prefix','dup-suffix','dup-add-index'].forEach(id => {
+      document.addEventListener('input', (e) => { if (e.target && e.target.id === id) updateDupPreview(); });
+      document.addEventListener('change', (e) => { if (e.target && e.target.id === id) updateDupPreview(); });
+    });
+    async function saveProductDuplicate(ev) {
+      ev.preventDefault();
+      const count = Math.max(1, Math.min(50, parseInt(document.getElementById('dup-count').value || '1', 10)));
+      const code_prefix = document.getElementById('dup-prefix').value || '';
+      const code_suffix = document.getElementById('dup-suffix').value || '';
+      const add_index = document.getElementById('dup-add-index').checked;
+      const bump_name = document.getElementById('dup-bump-name').checked;
+      try {
+        const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+        const resp = await fetch(`/modules/${dupState.modulePk}/products/${dupState.itemId}/duplicate.json`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrftoken },
+          body: JSON.stringify({ count, code_prefix, code_suffix, add_index, index_start: 1, bump_name })
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Błąd duplikacji');
+        showDupSuccess(`Utworzono: ${data.created}, błędów: ${data.failed}`);
+        // If we have the grid and backend returned new rows, append them immediately
+        if (window.__productGrid && Array.isArray(data.results)) {
+          const addRows = [];
+          data.results.forEach(r => { if (r && r.ok && r.row) addRows.push(r.row); });
+          if (addRows.length) {
+            window.__productGrid.addData(addRows, true).then(() => {
+              // Optionally scroll to top
+              window.__productGrid.scrollToRow(addRows[0].item_id);
+            }).catch(() => {});
+          }
+        }
+        setTimeout(() => { closeDuplicateModal(); }, 800);
+      } catch (e) {
+        showDupError(e.message || 'Błąd duplikacji.');
+      }
+      return false;
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDuplicateModal(); });
+  </script>
+{% endif %}
 {% endblock %}

@@ -13,6 +13,15 @@ class RedirectRule(models.Model):
         PRODUCT_TO_URL = 'product_to_url', 'Product ID → URL'
         CATEGORY_TO_URL = 'category_to_url', 'Category ID → URL'
 
+    class TargetType(models.IntegerChoices):
+        OWN = 0, 'Własny URL'
+        PRODUCT = 1, 'Produkt'
+        CATEGORY = 2, 'Kategoria produktu'
+        PRODUCER = 3, 'Producent'
+        INFO_PAGE = 4, 'Strona informacyjna'
+        NEWS = 5, 'Aktualność'
+        NEWS_CATEGORY = 6, 'Kategoria aktualności'
+
     STATUS_CHOICES = (
         (301, '301 Moved Permanently'),
         (302, '302 Found / Temporary'),
@@ -31,6 +40,8 @@ class RedirectRule(models.Model):
 
     # Common target
     target_url = models.CharField(max_length=512, help_text='Docelowy URL (np. /nowa-strona)')
+    target_type = models.IntegerField(choices=TargetType.choices, default=TargetType.OWN)
+    target_object_id = models.BigIntegerField(null=True, blank=True)
 
     status_code = models.IntegerField(choices=STATUS_CHOICES, default=301)
     active = models.BooleanField(default=True)

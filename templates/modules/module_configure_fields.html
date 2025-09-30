@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load module_extras %}
 {% block title %}Atrybuty modułu — ShoperCenter{% endblock %}
 {% block content %}
 <div class="flex justify-between items-center mb-4">
@@ -20,13 +21,48 @@
   {% endif %}
 {% endif %}
 
+{% if module.resource == 'products' %}
+<div class="alert alert-info mb-4">
+  <div>
+    <div class="font-semibold">Informacje o polach produktów</div>
+    <div class="text-sm mt-1">
+      <span class="badge badge-success badge-xs">EDYTOWALNE</span> pola można modyfikować przez API Shopera<br>
+      <span class="badge badge-warning badge-xs">READONLY</span> pola są tylko do odczytu (ID, daty, statystyki)<br>
+      <span class="badge badge-info badge-xs">ZALECANE</span> najważniejsze pola produktu są automatycznie zaznaczone
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+  <div class="stat bg-base-200 rounded">
+    <div class="stat-title">Pola podstawowe</div>
+    <div class="stat-value text-sm">Nazwa, kod, EAN, opis</div>
+  </div>
+  <div class="stat bg-base-200 rounded">
+    <div class="stat-title">Ceny i magazyn</div>
+    <div class="stat-value text-sm">Ceny, promocje, stan</div>
+  </div>
+  <div class="stat bg-base-200 rounded">
+    <div class="stat-title">SEO i dodatkowe</div>
+    <div class="stat-value text-sm">Meta, kategorie</div>
+  </div>
+</div>
+{% endif %}
+
 <label for="fields-modal" class="btn btn-primary">Wybierz atrybuty</label>
 <input type="checkbox" id="fields-modal" class="modal-toggle" checked />
 <div class="modal">
-  <div class="modal-box max-w-4xl">
+  <div class="modal-box max-w-5xl">
     <h3 class="font-bold text-lg mb-4">Wybierz atrybuty do wyświetlania</h3>
     <form method="post" class="space-y-4">
       {% csrf_token %}
+      <div class="flex items-center gap-2 mb-2">
+        <button type="button" class="btn btn-sm" onclick="cfgSelectAll(true)">Zaznacz wszystkie</button>
+        <button type="button" class="btn btn-sm" onclick="cfgSelectAll(false)">Odznacz wszystkie</button>
+        {% if module.resource == 'products' %}
+        <button type="button" class="btn btn-sm btn-primary" onclick="cfgSelectRecommended()">Zalecane</button>
+        {% endif %}
+      </div>
       <div class="overflow-y-auto max-h-[60vh]">
         <table class="table w-full">
           <thead>
@@ -34,22 +70,49 @@
               <th>Widoczne</th>
               <th>Klucz</th>
               <th>Nazwa kolumny</th>
+              {% if module.resource == 'products' %}
+                <th>Kategoria</th>
+                <th>Edytowalność</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody>
           {% for key in fields %}
-            <tr>
+            <tr class="{% if key in selected_keys %}bg-blue-50{% endif %}">
               <td>
                 <input type="checkbox" name="fields" value="{{ key }}" class="checkbox"
                   {% if key in selected_keys %}checked{% endif %} />
               </td>
               <td><code class="text-xs">{{ key }}</code></td>
               <td>
-                <input type="text" name="label__{{ key }}" value="{{ key }}" class="input input-bordered w-full" />
+                {% if module.resource == 'products' and key in recommended_fields %}
+                  <input type="text" name="label__{{ key }}" value="{{ recommended_fields|get_item:key|get_item:'label' }}" class="input input-bordered w-full" />
+                  <span class="badge badge-info badge-xs">zalecane</span>
+                {% else %}
+                  <input type="text" name="label__{{ key }}" value="{{ key }}" class="input input-bordered w-full" />
+                {% endif %}
               </td>
+              {% if module.resource == 'products' %}
+                <td>
+                  {% if key in recommended_fields %}
+                    <span class="badge badge-outline badge-xs">{{ recommended_fields|get_item:key|get_item:'category' }}</span>
+                  {% else %}
+                    <span class="text-xs opacity-60">API</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if key in non_editable_keys %}
+                    <span class="badge badge-warning badge-xs">READONLY</span>
+                    <div class="text-xs opacity-70 mt-1">Tylko do odczytu</div>
+                  {% else %}
+                    <span class="badge badge-success badge-xs">EDYTOWALNE</span>
+                    <div class="text-xs opacity-70 mt-1">Można modyfikować</div>
+                  {% endif %}
+                </td>
+              {% endif %}
             </tr>
           {% empty %}
-            <tr><td colspan="3">Brak atrybutów do wyświetlenia.</td></tr>
+            <tr><td colspan="{% if module.resource == 'products' %}5{% else %}3{% endif %}">Brak atrybutów do wyświetlenia.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -61,4 +124,13 @@
     </form>
   </div>
 </div>
+<script>
+  function cfgSelectAll(flag){
+    document.querySelectorAll('input[name="fields"]').forEach(chk=>{chk.checked=!!flag});
+  }
+  function cfgSelectRecommended(){
+    const recKeys = new Set({% if recommended_fields %}[{% for k in recommended_fields %}'{{ k }}'{% if not forloop.last %},{% endif %}{% endfor %}]{% else %}[]{% endif %});
+    document.querySelectorAll('input[name="fields"]').forEach(chk=>{chk.checked = recKeys.has(chk.value)});
+  }
+</script>
 {% endblock %}

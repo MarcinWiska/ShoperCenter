@@ -24,7 +24,7 @@
         <td>{{ m.resource }}</td>
         <td class="space-x-2">
           <a class="btn btn-xs" href="{% url 'modules:detail' m.pk %}">Otwórz</a>
-          <a class="btn btn-xs" href="{% url 'modules:configure' m.pk %}">Atrybuty</a>
+          <button class="btn btn-xs" onclick="openModuleFieldsModal({{ m.pk }}, '{{ m.name|escapejs }}')">Atrybuty</button>
         </td>
       </tr>
       {% empty %}
@@ -33,5 +33,201 @@
     </tbody>
   </table>
 </div>
-{% endblock %}
+  
+<!-- Modal konfiguracji atrybutów z poziomu listy -->
+<input type="checkbox" id="module-fields-modal" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-5xl relative">
+    <label for="module-fields-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
+    <h3 class="font-bold text-lg mb-2">Konfiguracja atrybutów: <span id="mf-module-name" class="opacity-80"></span></h3>
+    <div id="mf-alert" class="hidden alert mb-3"></div>
 
+    <div class="flex items-center gap-2 mb-3">
+      <button class="btn btn-sm" onclick="mfSelectAll(true)">Zaznacz wszystkie</button>
+      <button class="btn btn-sm" onclick="mfSelectAll(false)">Odznacz wszystkie</button>
+      <button class="btn btn-sm btn-primary" onclick="mfSelectRecommended()">Zalecane</button>
+    </div>
+
+    <div class="overflow-y-auto max-h-[60vh]">
+      <table class="table w-full" id="mf-table">
+        <thead>
+          <tr>
+            <th>Widoczne</th>
+            <th>Klucz</th>
+            <th>Nazwa kolumny</th>
+            <th>Kategoria</th>
+            <th>Edytowalność</th>
+          </tr>
+        </thead>
+        <tbody id="mf-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="modal-action">
+      <label for="module-fields-modal" class="btn">Anuluj</label>
+      <button class="btn btn-primary" onclick="saveModuleFields()">Zapisz</button>
+    </div>
+  </div>
+  <label class="modal-backdrop" for="module-fields-modal">Zamknij</label>
+</div>
+
+<script>
+  let mfState = { modulePk: null, moduleName: '', fields: [], selected: new Set(), recMap: {}, nonEditable: new Set(), resource: '' };
+
+  function closeModuleFieldsModal() {
+    const cb = document.getElementById('module-fields-modal');
+    if (cb) cb.checked = false;
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+
+  async function openModuleFieldsModal(modulePk, moduleName) {
+    mfState = { modulePk, moduleName, fields: [], selected: new Set(), recMap: {}, nonEditable: new Set(), resource: '' };
+    document.getElementById('mf-module-name').textContent = moduleName;
+    const alertBox = document.getElementById('mf-alert');
+    alertBox.className = 'hidden alert mb-3';
+    alertBox.textContent = '';
+    document.getElementById('mf-tbody').innerHTML = '<tr><td colspan="5" class="opacity-60">Ładowanie…</td></tr>';
+    document.getElementById('module-fields-modal').checked = true;
+
+    try {
+      const resp = await fetch(`/modules/${modulePk}/configure.json`, { headers: { 'Accept': 'application/json' } });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'Błąd pobierania');
+      mfState.fields = data.fields || [];
+      mfState.selected = new Set(data.selected_keys || []);
+      mfState.recMap = data.recommended_fields || {};
+      mfState.nonEditable = new Set(data.non_editable_keys || []);
+      mfState.resource = (data.module && data.module.resource) || '';
+      renderMfRows();
+    } catch (e) {
+      showMfError(e.message || 'Błąd ładowania.');
+    }
+  }
+
+  function renderMfRows() {
+    const tbody = document.getElementById('mf-tbody');
+    tbody.innerHTML = '';
+    mfState.fields.forEach(key => {
+      const tr = document.createElement('tr');
+
+      const tdChk = document.createElement('td');
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'checkbox';
+      chk.checked = mfState.selected.has(key);
+      chk.dataset.key = key;
+      chk.addEventListener('change', (e) => {
+        if (e.target.checked) mfState.selected.add(key); else mfState.selected.delete(key);
+      });
+      tdChk.appendChild(chk);
+
+      const tdKey = document.createElement('td');
+      tdKey.innerHTML = `<code class="text-xs">${key}</code>`;
+
+      const tdLabel = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'input input-bordered w-full';
+      const recInfo = mfState.recMap[key];
+      const defaultLabel = recInfo && recInfo.label ? recInfo.label : key;
+      input.value = defaultLabel;
+      input.dataset.key = key;
+      tdLabel.appendChild(input);
+      if (recInfo) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-info badge-xs ml-2';
+        badge.textContent = 'zalecane';
+        tdLabel.appendChild(badge);
+      }
+
+      const tdCat = document.createElement('td');
+      tdCat.innerHTML = recInfo && recInfo.category ? `<span class="badge badge-outline badge-xs">${recInfo.category}</span>` : '<span class="text-xs opacity-60">API</span>';
+
+      const tdEdit = document.createElement('td');
+      if (mfState.resource === 'products') {
+        const ro = mfState.nonEditable.has(key);
+        tdEdit.innerHTML = ro ? '<span class="badge badge-warning badge-xs">READONLY</span><div class="text-xs opacity-70 mt-1">Tylko do odczytu</div>' : '<span class="badge badge-success badge-xs">EDYTOWALNE</span><div class="text-xs opacity-70 mt-1">Można modyfikować</div>';
+      } else {
+        tdEdit.innerHTML = '<span class="text-xs opacity-60">—</span>';
+      }
+
+      tr.appendChild(tdChk);
+      tr.appendChild(tdKey);
+      tr.appendChild(tdLabel);
+      tr.appendChild(tdCat);
+      tr.appendChild(tdEdit);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function showMfError(msg) {
+    const alertBox = document.getElementById('mf-alert');
+    alertBox.className = 'alert alert-error mb-3';
+    alertBox.textContent = msg;
+  }
+
+  function showMfSuccess(msg) {
+    const alertBox = document.getElementById('mf-alert');
+    alertBox.className = 'alert alert-success mb-3';
+    alertBox.textContent = msg;
+  }
+
+  function mfSelectAll(flag) {
+    const tbody = document.getElementById('mf-tbody');
+    tbody.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+      chk.checked = flag;
+      const key = chk.dataset.key;
+      if (flag) mfState.selected.add(key); else mfState.selected.delete(key);
+    });
+  }
+
+  function mfSelectRecommended() {
+    // Select only recommended keys that exist in fields
+    const recKeys = new Set(Object.keys(mfState.recMap || {}));
+    mfState.selected = new Set(mfState.fields.filter(k => recKeys.has(k)));
+    renderMfRows();
+  }
+
+  async function saveModuleFields() {
+    try {
+      const labels = {};
+      document.querySelectorAll('#mf-tbody input[type="text"]').forEach(inp => {
+        labels[inp.dataset.key] = inp.value || inp.dataset.key;
+      });
+      const fields = Array.from(mfState.selected);
+      const csrftoken = getCookie('csrftoken');
+      const resp = await fetch(`/modules/${mfState.modulePk}/configure.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRFToken': csrftoken || ''
+        },
+        body: JSON.stringify({ fields, labels })
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'Błąd zapisu');
+      showMfSuccess('Zapisano konfigurację atrybutów. Przechodzę do modułu…');
+      // Zamknij modal i przejdź do widoku modułu po krótkiej pauzie
+      setTimeout(() => {
+        closeModuleFieldsModal();
+        window.location.href = `/modules/${mfState.modulePk}/`;
+      }, 600);
+    } catch (e) {
+      showMfError(e.message || 'Błąd zapisu.');
+    }
+  }
+
+  // Zamykaj modal klawiszem Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeModuleFieldsModal();
+    }
+  });
+</script>
+{% endblock %}

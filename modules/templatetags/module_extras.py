@@ -3,42 +3,21 @@ from django import template
 register = template.Library()
 
 
-@register.filter(name="dotget")
-def dotget(value, path: str):
-    """Resolve nested keys from dict/list using dotted path, e.g. "a.b.0.c".
-    Returns empty string if any step is missing.
-    """
-    data = value
-    if path is None:
-        return ""
-    for raw in str(path).split('.'):
-        key = raw.strip()
-        if key == "":
-            continue
-        # List index support
-        idx = None
-        try:
-            idx = int(key)
-        except ValueError:
-            idx = None
+from django import template
 
-        if isinstance(data, dict):
-            data = data.get(key)
-        elif isinstance(data, list) and idx is not None:
-            if 0 <= idx < len(data):
-                data = data[idx]
-            else:
-                return ""
-        else:
-            return ""
+register = template.Library()
 
-        if data is None:
-            return ""
 
-    # Render lists/dicts succinctly
-    if isinstance(data, list):
-        return ", ".join(map(str, data[:5]))
-    if isinstance(data, dict):
-        return str(data)
-    return data
+@register.filter
+def dotget(data, path):
+    """Get nested value from dict/list using dotted path (e.g., 'a.b.0.c')"""
+    from modules.shoper import dot_get
+    return dot_get(data, path)
 
+
+@register.filter
+def get_item(dictionary, key):
+    """Get item from dictionary"""
+    if isinstance(dictionary, dict):
+        return dictionary.get(key)
+    return None

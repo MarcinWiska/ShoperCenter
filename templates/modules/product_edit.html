@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% block title %}Edycja produktu — ShoperCenter{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <div>
+    <h1 class="text-2xl font-semibold">Edycja produktu</h1>
+    <div class="text-sm opacity-70">{{ module.shop.name }} / ID: {{ item_id }}</div>
+  </div>
+  <div class="space-x-2">
+    <a class="btn" href="{% url 'modules:detail' module.pk %}">Wróć</a>
+  </div>
+</div>
+
+<div class="max-w-6xl">
+  <div class="alert alert-info mb-4">
+    <div>
+      <div class="font-semibold">Edytujesz tylko wybrane pola</div>
+      <div class="text-sm mt-1">Do API Shopera wysyłamy wyłącznie wartości, które faktycznie zmieniłeś. Pola oznaczone jako "nieedytowalne" są zablokowane na podstawie dokumentacji API.</div>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    
+    <!-- Tabs for categories -->
+    {% if field_categories %}
+      <div class="tabs tabs-bordered mb-6">
+        {% for category, category_fields in field_categories.items %}
+          {% if category_fields %}
+            <a class="tab tab-active" data-tab="{{ category|slugify }}">{{ category }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <!-- Tab content -->
+      {% for category, category_fields in field_categories.items %}
+        {% if category_fields %}
+          <div class="tab-content" id="tab-{{ category|slugify }}" style="display: block;">
+            <h3 class="text-lg font-semibold mb-4">{{ category }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {% for f in category_fields %}
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">
+                      {{ f.label }} 
+                      <span class="text-xs opacity-60">({{ f.key }})</span>
+                      {% if not f.editable %}
+                        <span class="badge badge-warning badge-xs ml-1">readonly</span>
+                      {% endif %}
+                    </span>
+                  </label>
+
+                  {% if f.type == 'bool' %}
+                    <label class="cursor-pointer label justify-start">
+                      <input type="checkbox" name="field__{{ f.key }}" class="toggle toggle-primary mr-2" {% if f.value %}checked{% endif %} {% if not f.editable %}disabled{% endif %} />
+                      <span class="label-text">{{ f.value|yesno:"Tak,Nie" }}</span>
+                    </label>
+                  {% elif f.type == 'number' %}
+                    <input type="number" step="any" name="field__{{ f.key }}" value="{{ f.value }}" class="input input-bordered w-full {% if not f.editable %}input-disabled{% endif %}" {% if not f.editable %}disabled{% endif %} />
+                  {% else %}
+                    <input type="text" name="field__{{ f.key }}" value="{{ f.value }}" class="input input-bordered w-full {% if not f.editable %}input-disabled{% endif %}" {% if not f.editable %}disabled{% endif %} />
+                  {% endif %}
+
+                  {% if not f.editable %}
+                    <div class="text-xs opacity-70 mt-1">
+                      <span class="text-warning">⚠</span> To pole nie jest edytowalne zgodnie z API Shopera
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <!-- Fallback: show all fields without categories -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for f in editable %}
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">
+                {{ f.label }} 
+                <span class="text-xs opacity-60">({{ f.key }})</span>
+                {% if not f.editable %}
+                  <span class="badge badge-warning badge-xs ml-1">readonly</span>
+                {% endif %}
+              </span>
+            </label>
+
+            {% if f.type == 'bool' %}
+              <label class="cursor-pointer label justify-start">
+                <input type="checkbox" name="field__{{ f.key }}" class="toggle toggle-primary mr-2" {% if f.value %}checked{% endif %} {% if not f.editable %}disabled{% endif %} />
+                <span class="label-text">{{ f.value|yesno:"Tak,Nie" }}</span>
+              </label>
+            {% elif f.type == 'number' %}
+              <input type="number" step="any" name="field__{{ f.key }}" value="{{ f.value }}" class="input input-bordered w-full {% if not f.editable %}input-disabled{% endif %}" {% if not f.editable %}disabled{% endif %} />
+            {% else %}
+              <input type="text" name="field__{{ f.key }}" value="{{ f.value }}" class="input input-bordered w-full {% if not f.editable %}input-disabled{% endif %}" {% if not f.editable %}disabled{% endif %} />
+            {% endif %}
+
+            {% if not f.editable %}
+              <div class="text-xs opacity-70 mt-1">
+                <span class="text-warning">⚠</span> To pole nie jest edytowalne zgodnie z API Shopera
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="mt-6 flex justify-end space-x-2">
+      <a class="btn" href="{% url 'modules:detail' module.pk %}">Anuluj</a>
+      <button class="btn btn-primary" type="submit">Zapisz zmiany</button>
+    </div>
+  </form>
+  
+  <div class="mt-8 border-t pt-4">
+    <h3 class="text-lg font-semibold mb-2">Informacje o edytowalności pól</h3>
+    <div class="text-sm space-y-1 opacity-80">
+      <p><strong>Edytowalne pola:</strong> zgodnie z dokumentacją API Shopera mogą być modyfikowane</p>
+      <p><strong>Pola readonly:</strong> nie mogą być edytowane (ID, daty utworzenia/modyfikacji, statystyki, itp.)</p>
+      <p><strong>Tłumaczenia:</strong> pola pod `translations.*` są edytowalne dla różnych lokalizacji</p>
+      <p><strong>Stock:</strong> większość pól pod `stock.*` można edytować</p>
+      <p><strong>Atrybuty:</strong> wszystkie pola pod `attributes.*` są edytowalne</p>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Handle tab switching
+  const tabs = document.querySelectorAll('.tab');
+  const contents = document.querySelectorAll('.tab-content');
+  
+  tabs.forEach(tab => {
+    tab.addEventListener('click', function() {
+      // Remove active class from all tabs
+      tabs.forEach(t => t.classList.remove('tab-active'));
+      // Hide all content
+      contents.forEach(c => c.style.display = 'none');
+      
+      // Activate clicked tab
+      this.classList.add('tab-active');
+      const targetTab = this.getAttribute('data-tab');
+      const targetContent = document.getElementById('tab-' + targetTab);
+      if (targetContent) {
+        targetContent.style.display = 'block';
+      }
+    });
+  });
+  
+  // Show first tab by default
+  if (tabs.length > 0) {
+    tabs[0].click();
+  }
+});
+</script>
+{% endblock %}

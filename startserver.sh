@@ -12,6 +12,7 @@ echo "[1/6] Ensuring PostgreSQL is installed and running..."
 if ! command -v psql >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update -y
+    sudo apt install python3.12-venv -y
     sudo apt-get install -y postgresql postgresql-contrib postgresql-client
   else
     echo "apt-get not found. Please install PostgreSQL manually and re-run."
@@ -124,12 +125,45 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 
 echo "[4/6] Building frontend CSS (Tailwind + DaisyUI)..."
-if command -v npm >/dev/null 2>&1; then
-  npm install --no-audit --no-fund
+
+ensure_linux_node() {
+  # Usuń windowsowego node/npm z PATH dla tej sesji
+  if printf "%s" "$PATH" | grep -qi '/mnt/c/Program Files/nodejs'; then
+    export PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vi '/mnt/c/Program Files/nodejs' | paste -sd: -)"
+  fi
+
+  # Zainstaluj narzędzia do kompilacji natywnych modułów npm (@parcel/watcher)
+  if ! dpkg -s build-essential >/dev/null 2>&1; then
+    sudo apt-get update -y
+    sudo apt-get install -y build-essential python3 make g++
+  fi
+
+  # Zapewnij Node.js LTS jeśli brak lub jeśli pochodzi z /mnt/c
+  if ! command -v node >/dev/null 2>&1 || printf "%s" "$(command -v node)" | grep -qi '^/mnt/'; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+  fi
+
+  # Ustaw cache npm w $HOME, żeby nie trafiał w ścieżki windowsowe
+  export npm_config_cache="$HOME/.npm"
+  export npm_config_update_notifier=false
+}
+
+if [ -f package.json ]; then
+  ensure_linux_node
+  echo "Using node: $(command -v node) | $(node -v)"
+  echo "Using npm : $(command -v npm)  | $(npm -v)"
+  if [ -f package-lock.json ]; then
+    npm ci --no-audit --no-fund
+  else
+    npm install --no-audit --no-fund
+  fi
+  # Jeśli masz w package.json skrypt "build:css"
   npm run build:css || echo "Tailwind build failed; continuing (dev only)."
 else
-  echo "npm not found. Skipping CSS build."
+  echo "No package.json found. Skipping CSS build."
 fi
+
 
 echo "[5/6] Running migrations..."
 export POSTGRES_DB="${DB_NAME}"
