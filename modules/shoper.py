@@ -797,18 +797,24 @@ def fetch_fields(base_url: str, token: str, path: str, limit: int = 20) -> List[
     return sorted(flat_keys)
 
 
-def fetch_rows(base_url: str, token: str, path: str, limit: int = 50) -> List[Dict[str, Any]]:
-    """Fetch all items from API with pagination support.
+def fetch_rows(base_url: str, token: str, path: str, limit: int = 0) -> List[Dict[str, Any]]:
+    """Fetch all items from API with full pagination support.
     Shoper API returns pagination info in response: {count, pages, page, list: [...]}
-    We'll fetch page by page until we get all items or reach a reasonable limit.
+    We fetch ALL pages by default (limit=0) or up to limit if specified.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     p = path.strip('/')
     all_items: List[Dict[str, Any]] = []
     page = 1
     per_page = 50  # Shoper API default/max per page
-    max_pages = 100  # Safety limit to prevent infinite loops
+    max_pages = 1000  # Safety limit to prevent infinite loops (50k items max)
+    
+    logger.info(f"Starting fetch_rows for path: {p}, limit: {limit}")
     
     for root in build_rest_roots(base_url):
+        logger.info(f"Trying root: {root}")
         while page <= max_pages:
             candidates = [
                 urljoin(root, p) + f'?limit={per_page}&page={page}',
@@ -817,27 +823,34 @@ def fetch_rows(base_url: str, token: str, path: str, limit: int = 50) -> List[Di
             
             data = None
             for url in candidates:
-                data, _ = _try_get_json(url, token)
+                logger.debug(f"Fetching page {page} from {url}")
+                data, error = _try_get_json(url, token)
                 if data is not None:
                     break
+                logger.debug(f"Failed: {error}")
             
             if data is None:
                 # If first page failed, try other roots
                 if page == 1:
+                    logger.warning(f"First page failed for root {root}, trying next root")
                     break
                 else:
                     # No more pages available
+                    logger.info(f"No more data at page {page}, total items: {len(all_items)}")
                     return all_items[:limit] if limit > 0 else all_items
             
             items = extract_items(data)
             if not items or not isinstance(items, list):
                 # No more items, we're done
+                logger.info(f"No items in response at page {page}, total items: {len(all_items)}")
                 return all_items[:limit] if limit > 0 else all_items
             
+            logger.info(f"Page {page}: got {len(items)} items")
             all_items.extend(items)
             
-            # Check if we've reached the limit
+            # Check if we've reached the user-specified limit
             if limit > 0 and len(all_items) >= limit:
+                logger.info(f"Reached user limit {limit}, stopping")
                 return all_items[:limit]
             
             # Check pagination metadata from Shoper API
@@ -845,20 +858,28 @@ def fetch_rows(base_url: str, token: str, path: str, limit: int = 50) -> List[Di
             if isinstance(data, dict):
                 total_pages = data.get('pages')
                 current_page = data.get('page')
+                total_count = data.get('count')
+                
+                logger.info(f"API pagination info: page {current_page}/{total_pages}, total count: {total_count}")
+                
                 if total_pages and current_page and current_page >= total_pages:
                     # We've fetched all pages
+                    logger.info(f"Fetched all {total_pages} pages, total items: {len(all_items)}")
                     return all_items[:limit] if limit > 0 else all_items
             
             # If we got fewer items than per_page, probably last page
             if len(items) < per_page:
+                logger.info(f"Got {len(items)} < {per_page}, assuming last page")
                 return all_items[:limit] if limit > 0 else all_items
             
             page += 1
         
         # If we successfully fetched items, don't try other roots
         if all_items:
+            logger.info(f"Successfully fetched {len(all_items)} items total")
             return all_items[:limit] if limit > 0 else all_items
     
+    logger.warning(f"No items fetched from any root")
     return []
 
 
@@ -866,6 +887,56 @@ def resolve_path(resource: str, override: Optional[str]) -> Optional[str]:
     if override:
         return override
     return RESOURCE_TO_PATH.get(resource)
+
+
+def delete_product(base_url: str, token: str, product_id: Union[str, int]) -> Tuple[bool, str]:
+    """Delete a product by ID.
+    Returns (ok, message).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    url = build_rest_url(base_url, f"products/{product_id}")
+    headers = auth_headers(token)
+    
+    logger.info(f"Attempting to delete product {product_id} at {url}")
+    
+    try:
+        resp = requests.delete(url, headers=headers, timeout=20)
+        logger.info(f"DELETE {url} -> HTTP {resp.status_code}")
+        logger.info(f"Response: {resp.text[:500]}")
+        
+        if resp.status_code in (200, 204, 202):
+            logger.info(f"Product {product_id} deleted successfully")
+            return True, "Produkt został usunięty"
+        
+        # Parse error
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                error_msg = (
+                    data.get('error_description') or 
+                    data.get('error') or 
+                    data.get('message') or 
+                    str(data)
+                )
+            else:
+                error_msg = str(data)
+        except Exception:
+            error_msg = resp.text[:200] or f"HTTP {resp.status_code}"
+        
+        logger.error(f"Failed to delete product {product_id}: {error_msg}")
+        return False, f"Błąd usuwania: {error_msg}"
+        
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout deleting product {product_id}")
+        return False, "Przekroczono czas oczekiwania na odpowiedź API"
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Connection error deleting product {product_id}")
+        return False, "Błąd połączenia z API"
+    except Exception as e:
+        logger.error(f"Unexpected error deleting product {product_id}: {e}")
+        return False, f"Nieoczekiwany błąd: {type(e).__name__}: {e}"
 
 
 def get_recommended_product_fields() -> List[Dict[str, str]]:

@@ -25,6 +25,7 @@ from .shoper import (
     unflatten,
     update_product,
     create_product,
+    delete_product,
     is_editable_product_field,
     get_recommended_product_fields,
 )
@@ -233,7 +234,8 @@ class ModuleDetailView(LoginRequiredMixin, DetailView):
         ctx = super().get_context_data(**kwargs)
         module: Module = self.object
         api_path = resolve_path(module.resource, module.api_path_override)
-        rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path) if api_path else []
+        # Fetch all rows (limit=0 means no limit)
+        rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path, limit=0) if api_path else []
         # Try to detect ID per row for products so we can link to edit
         rows_with_id: List[Dict[str, Any]] = []
         id_keys = [
@@ -577,6 +579,8 @@ def module_data_json(request: HttpRequest, pk: int):
     if limit > 0:
         limit = min(limit, 10000)
 
+    logger.info(f"Fetching data for module {pk}, limit: {limit}")
+
     # Columns: use configured fields; for products, fallback to recommended if empty
     columns_cfg = module.fields_config or []
     if module.resource == Module.Resource.PRODUCTS and not columns_cfg:
@@ -584,11 +588,13 @@ def module_data_json(request: HttpRequest, pk: int):
         columns_cfg = [{'key': f['key'], 'label': f.get('label', f['key'])} for f in rec]
 
     rows = fetch_rows(module.shop.base_url, module.shop.bearer_token, api_path, limit=limit) if api_path else []
+    
+    logger.info(f"Fetched {len(rows)} rows for module {pk}")
 
     # Try to detect item_id per row
     id_keys = ['product_id', 'id', 'product.id', 'product.product_id', 'productId', 'productID', 'id_product']
     out_rows: List[Dict[str, Any]] = []
-    for row in rows[:limit]:
+    for row in rows:
         item: Dict[str, Any] = {}
         found_id = None
         for k in id_keys:
@@ -639,6 +645,7 @@ def module_data_json(request: HttpRequest, pk: int):
             'type': infer_type(key),
         })
 
+    logger.info(f"Returning {len(out_rows)} rows with {len(columns_meta)} columns")
     return JsonResponse({'ok': True, 'columns': columns_meta, 'rows': out_rows, 'resource': module.resource})
 
 
@@ -1130,3 +1137,74 @@ def product_duplicate_json(request: HttpRequest, pk: int, item_id: int):
 
     logger.info(f"Duplication completed: created={created}, failed={failed}")
     return JsonResponse({'ok': True, 'created': created, 'failed': failed, 'results': results})
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def product_delete_json(request: HttpRequest, pk: int, item_id: int):
+    """Delete a single product.
+    - DELETE: removes the product from Shoper
+    """
+    logger.info(f"product_delete_json called for product {item_id}, module {pk}")
+    
+    module = get_object_or_404(Module, pk=pk, owner=request.user)
+    if module.resource != Module.Resource.PRODUCTS:
+        return JsonResponse({'ok': False, 'error': 'Dostępne tylko dla modułu produktów.'}, status=400)
+    
+    ok, msg = delete_product(module.shop.base_url, module.shop.bearer_token, item_id)
+    
+    if ok:
+        logger.info(f"Successfully deleted product {item_id}")
+        return JsonResponse({'ok': True, 'message': msg})
+    
+    logger.error(f"Failed to delete product {item_id}: {msg}")
+    return JsonResponse({'ok': False, 'error': msg}, status=502)
+
+
+@login_required
+@require_http_methods(["POST"])
+def products_bulk_delete_json(request: HttpRequest, pk: int):
+    """Delete multiple products in bulk.
+    Payload: {product_ids: [int, int, ...]}
+    Returns per-product result and a summary.
+    """
+    logger.info(f"products_bulk_delete_json called for module {pk}")
+    
+    module = get_object_or_404(Module, pk=pk, owner=request.user)
+    if module.resource != Module.Resource.PRODUCTS:
+        return JsonResponse({'ok': False, 'error': 'Dostępne tylko dla modułu produktów.'}, status=400)
+    
+    try:
+        payload = json.loads(request.body.decode('utf-8')) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON payload.'}, status=400)
+    
+    product_ids = payload.get('product_ids') or []
+    if not isinstance(product_ids, list) or not product_ids:
+        return JsonResponse({'ok': False, 'error': 'Brak produktów do usunięcia.'}, status=400)
+    
+    deleted = 0
+    failed = 0
+    results: List[Dict[str, Any]] = []
+    
+    logger.info(f"Deleting {len(product_ids)} products")
+    
+    for product_id in product_ids:
+        try:
+            product_id = int(product_id)
+        except Exception:
+            failed += 1
+            results.append({'product_id': product_id, 'ok': False, 'error': 'Nieprawidłowe ID produktu.'})
+            continue
+        
+        ok, msg = delete_product(module.shop.base_url, module.shop.bearer_token, product_id)
+        
+        if ok:
+            deleted += 1
+            results.append({'product_id': product_id, 'ok': True, 'message': msg})
+        else:
+            failed += 1
+            results.append({'product_id': product_id, 'ok': False, 'error': msg})
+    
+    logger.info(f"Bulk delete completed: deleted={deleted}, failed={failed}")
+    return JsonResponse({'ok': True, 'deleted': deleted, 'failed': failed, 'results': results})

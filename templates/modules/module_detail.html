@@ -16,16 +16,24 @@
 <div class="overflow-x-auto">
   {% if module.resource == 'products' %}
     <!-- Spreadsheet-like grid for products -->
-    <div class="mb-3 flex items-center gap-2">
+    <div class="mb-3 flex items-center gap-2 flex-wrap">
       <button id="bulkSyncBtn" class="btn btn-primary btn-sm">
         <i class="fas fa-sync mr-2"></i>
         Zapisz zmiany (<span id="unsavedCount">0</span>)
+      </button>
+      <button id="bulkDeleteBtn" class="btn btn-error btn-sm">
+        <i class="fas fa-trash mr-2"></i>
+        Usuń zaznaczone (<span id="selectedCount">0</span>)
       </button>
       <button id="refreshGridBtn" class="btn btn-sm">
         <i class="fas fa-rotate mr-2"></i>
         Odśwież
       </button>
-      <span class="text-xs opacity-70">Dwuklik aby edytować komórkę. Pola oznaczone jako readonly są zablokowane.</span>
+      <label class="cursor-pointer flex items-center gap-2">
+        <input type="checkbox" id="selectAllCheckbox" class="checkbox checkbox-sm" />
+        <span class="text-xs">Zaznacz wszystkie</span>
+      </label>
+      <span class="text-xs opacity-70">Dwuklik aby edytować komórkę. Kliknij checkbox aby zaznaczyć wiele produktów do usunięcia. Pola readonly są zablokowane.</span>
     </div>
 
     <!-- Tabulator container -->
@@ -37,6 +45,7 @@
       const changedMap = new Map();
       let originalSnapshot = new Map(); // item_id -> { key: value }
       let editableKeys = [];
+      let selectedRows = new Set(); // Track selected row IDs
 
       function getChangedCount() {
         let count = 0;
@@ -49,14 +58,79 @@
         document.getElementById('unsavedCount').textContent = c;
       }
 
+      function updateSelectedUI() {
+        // Get actual selected rows from Tabulator
+        let actualSelectedCount = 0;
+        if (window.__productGrid) {
+          const selectedRowsInGrid = window.__productGrid.getSelectedRows();
+          actualSelectedCount = selectedRowsInGrid.length;
+          
+          // Rebuild selectedRows from actual grid selection
+          selectedRows.clear();
+          selectedRowsInGrid.forEach(row => {
+            const id = row.getData().item_id;
+            if (id) selectedRows.add(id);
+          });
+        }
+        
+        const c = selectedRows.size || actualSelectedCount;
+        document.getElementById('selectedCount').textContent = c;
+        
+        const deleteBtn = document.getElementById('bulkDeleteBtn');
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        
+        // Visual feedback - change opacity but keep button clickable
+        if (c > 0) {
+          deleteBtn.style.opacity = '1';
+          deleteBtn.classList.add('btn-error');
+        } else {
+          deleteBtn.style.opacity = '0.5';
+          deleteBtn.classList.remove('btn-error');
+        }
+        
+        // Update select all checkbox state
+        if (window.__productGrid) {
+          const allRows = window.__productGrid.getRows();
+          const selectedRowsInGrid = window.__productGrid.getSelectedRows();
+          
+          if (selectedRowsInGrid.length === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+          } else if (selectedRowsInGrid.length === allRows.length && allRows.length > 0) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.indeterminate = false;
+          } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = true;
+          }
+        }
+      }
+
       async function loadGridData() {
-        const resp = await fetch(`/modules/{{ module.pk }}/data.json?limit=200`, { headers: { 'Accept': 'application/json' } });
+        // limit=0 means fetch all products
+        const resp = await fetch(`/modules/{{ module.pk }}/data.json?limit=0`, { headers: { 'Accept': 'application/json' } });
         const data = await resp.json();
         if (!data.ok) throw new Error(data.error || 'Błąd pobierania danych');
 
         // Build Tabulator columns; use custom nestedFieldSeparator so dotted keys are literal
         editableKeys = [];
-        const cols = (data.columns || []).map(c => {
+        
+        // Add row selection column - simple Tabulator built-in
+        const cols = [
+          {
+            formatter: "rowSelection", 
+            titleFormatter: "rowSelection", 
+            hozAlign: "center", 
+            headerSort: false, 
+            width: 50,
+            cellClick: function(e, cell) {
+              // Stop propagation to prevent row click from interfering
+              e.stopPropagation();
+            }
+          }
+        ];
+        
+        cols.push(...(data.columns || []).map(c => {
           const base = { title: c.label || c.key, field: c.key, headerHozAlign: 'left' };
           if (c.type === 'bool') {
             base.formatter = 'tickCross';
@@ -70,11 +144,11 @@
           }
           if (c.editable) editableKeys.push(c.key);
           return base;
-        });
+        }));
 
         // Actions column
         cols.push({
-          title: 'Akcje', field: '__actions', width: 320, minWidth: 280, headerSort: false, hozAlign: 'left', formatter: (cell) => {
+          title: 'Akcje', field: '__actions', width: 380, minWidth: 320, headerSort: false, hozAlign: 'left', formatter: (cell) => {
             const d = cell.getRow().getData();
             const id = d.item_id;
             if (!id) return '<span class="opacity-50 text-xs">Brak ID</span>';
@@ -82,7 +156,8 @@
               <button class="btn btn-xs mr-1" onclick="openProductEditModal({{ module.pk }}, ${id})">Edytuj</button>
               <button class="btn btn-xs mr-1" onclick="openProductRedirectModal({{ module.pk }}, ${id})">Przekierowanie</button>
               <button class="btn btn-xs mr-1" onclick="openProductPromoModal({{ module.pk }}, ${id})">Promocja</button>
-              <button class="btn btn-xs" onclick="openProductDuplicateModal({{ module.pk }}, ${id})">Duplikuj</button>
+              <button class="btn btn-xs mr-1" onclick="openProductDuplicateModal({{ module.pk }}, ${id})">Duplikuj</button>
+              <button class="btn btn-error btn-xs" onclick="deleteProduct({{ module.pk }}, ${id})">Usuń</button>
             `;
           }
         });
@@ -98,6 +173,40 @@
           nestedFieldSeparator: '~~', // treat dotted keys as literal
           clipboard: true,
           columnDefaults: { tooltip: true },
+          selectable: true,  // Allow multiple row selection
+          selectableCheck: function(row) {
+            return true; // All rows are selectable
+          },
+          rowSelected: function(row){
+            const id = row.getData().item_id;
+            console.log('Row selected:', id);
+            if (id) {
+              selectedRows.add(id);
+              console.log('Selected rows:', Array.from(selectedRows));
+              updateSelectedUI();
+            }
+          },
+          rowDeselected: function(row){
+            const id = row.getData().item_id;
+            console.log('Row deselected:', id);
+            if (id) {
+              selectedRows.delete(id);
+              console.log('Selected rows:', Array.from(selectedRows));
+              updateSelectedUI();
+            }
+          },
+          rowSelectionChanged: function(data, rows){
+            // This is called whenever selection changes
+            console.log('Selection changed, selected rows count:', rows.length);
+            // Rebuild selectedRows set from actual selected rows
+            selectedRows.clear();
+            rows.forEach(row => {
+              const id = row.getData().item_id;
+              if (id) selectedRows.add(id);
+            });
+            console.log('Updated selectedRows:', Array.from(selectedRows));
+            updateSelectedUI();
+          },
           cellEdited: function(cell){
             const row = cell.getRow().getData();
             const field = cell.getField(); // dotted key
@@ -135,10 +244,23 @@
         });
       }
 
+      // Select all checkbox handler (external checkbox in toolbar)
+      document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
+        if (!window.__productGrid) return;
+        if (e.target.checked) {
+          window.__productGrid.selectRow();
+        } else {
+          window.__productGrid.deselectRow();
+        }
+      });
+
       document.getElementById('refreshGridBtn').addEventListener('click', async () => {
         try {
           changedMap.clear();
+          selectedRows.clear();
           updateUnsavedUI();
+          updateSelectedUI();
+          document.getElementById('selectAllCheckbox').checked = false;
           await loadGridData();
         } catch (e) {
           alert(e.message || 'Błąd odświeżania');
@@ -204,9 +326,80 @@
         }
       });
 
+      // Delete single product
+      async function deleteProduct(modulePk, itemId) {
+        if (!confirm(`Czy na pewno chcesz usunąć produkt #${itemId}? Ta operacja jest nieodwracalna.`)) {
+          return;
+        }
+        try {
+          const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+          const resp = await fetch(`/modules/${modulePk}/products/${itemId}/delete.json`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json', 'X-CSRFToken': csrftoken }
+          });
+          const data = await resp.json();
+          if (!data.ok) throw new Error(data.error || 'Błąd usuwania');
+          alert('Produkt został usunięty.');
+          document.getElementById('refreshGridBtn').click();
+        } catch (e) {
+          alert(e.message || 'Błąd usuwania.');
+        }
+      }
+
+      // Bulk delete selected products
+      document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
+        // Get actual selected rows from grid
+        let ids = [];
+        if (window.__productGrid) {
+          const selectedRowsInGrid = window.__productGrid.getSelectedRows();
+          ids = selectedRowsInGrid.map(row => row.getData().item_id).filter(id => id);
+        }
+        
+        // Fallback to tracked selectedRows if grid selection is empty
+        if (ids.length === 0) {
+          ids = Array.from(selectedRows);
+        }
+        
+        console.log('Attempting to delete IDs:', ids);
+        
+        if (ids.length === 0) {
+          alert('Nie zaznaczono żadnych produktów do usunięcia. Zaznacz produkty klikając w checkboxy.');
+          return;
+        }
+        
+        if (!confirm(`Czy na pewno chcesz usunąć ${ids.length} produktów? Ta operacja jest nieodwracalna.`)) {
+          return;
+        }
+        
+        try {
+          const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+          const resp = await fetch(`/modules/{{ module.pk }}/products/bulk_delete.json`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ product_ids: ids })
+          });
+          const data = await resp.json();
+          if (!data.ok) throw new Error(data.error || 'Błąd masowego usuwania');
+          const msg = `Usunięto: ${data.deleted}, błędów: ${data.failed}`;
+          alert(msg);
+          selectedRows.clear();
+          if (window.__productGrid) {
+            window.__productGrid.deselectRow();
+          }
+          updateSelectedUI();
+          document.getElementById('selectAllCheckbox').checked = false;
+          document.getElementById('refreshGridBtn').click();
+        } catch (e) {
+          alert(e.message || 'Błąd masowego usuwania.');
+        }
+      });
+
       // Initial load
       (async () => {
-        try { await loadGridData(); } catch (e) { alert(e.message || 'Błąd ładowania'); }
+        try { 
+          await loadGridData();
+          updateSelectedUI(); // Initialize button state
+        } catch (e) { alert(e.message || 'Błąd ładowania'); }
       })();
     </script>
   {% else %}
