@@ -201,6 +201,67 @@
       font-size: 0.875rem;
     }
     
+    /* DaisyUI input/select override for dark theme */
+    .input, .select, .textarea {
+      background-color: #0f172a !important;
+      border-color: #334155 !important;
+      color: #f1f5f9 !important;
+    }
+    
+    .input:focus, .select:focus, .textarea:focus {
+      outline: none !important;
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+      background-color: #1e293b !important;
+    }
+    
+    .input::placeholder, .textarea::placeholder {
+      color: #64748b !important;
+      opacity: 0.7;
+    }
+    
+    .input-bordered {
+      border-width: 1px !important;
+    }
+    
+    .select-bordered {
+      border-width: 1px !important;
+    }
+    
+    /* Checkbox and radio styling */
+    .checkbox, .radio {
+      border-color: #334155 !important;
+    }
+    
+    .checkbox:checked, .radio:checked {
+      background-color: #ef4444 !important;
+      border-color: #ef4444 !important;
+    }
+    
+    /* Label text styling */
+    .label-text {
+      color: #cbd5e1 !important;
+    }
+    
+    /* Modal backdrop */
+    .modal-backdrop {
+      background-color: rgba(0, 0, 0, 0.7) !important;
+    }
+    
+    /* Select options styling */
+    .select option {
+      background-color: #0f172a !important;
+      color: #f1f5f9 !important;
+    }
+    
+    /* Disabled input styling */
+    .input:disabled, .input-disabled {
+      background-color: #1e293b !important;
+      color: #64748b !important;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    
     /* Stat card styling */
     .stat-card {
       background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);

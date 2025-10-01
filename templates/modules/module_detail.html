@@ -430,9 +430,9 @@
   <!-- Modal toggle -->
   <input type="checkbox" id="product-edit-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box max-w-3xl relative">
-      <label for="product-edit-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
-      <h3 class="font-bold text-lg mb-4">Edytuj produkt <span id="pem-id" class="opacity-60"></span></h3>
+    <div class="modal-box max-w-3xl relative bg-gray-900 border border-gray-800">
+      <label for="product-edit-modal" class="btn btn-sm btn-circle absolute right-2 top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-4 text-white">Edytuj produkt <span id="pem-id" class="text-gray-400"></span></h3>
       <div id="pem-alert" class="hidden alert mb-3"></div>
       <form id="product-edit-form" class="space-y-4" onsubmit="return saveProductEdit(event)">
         <div id="pem-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
@@ -642,23 +642,23 @@
   <!-- Redirect modal -->
   <input type="checkbox" id="redirect-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box max-w-md relative">
-      <label for="redirect-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
-      <h3 class="font-bold text-lg mb-2">Utwórz przekierowanie → produkt <span id="rm-id" class="opacity-60"></span></h3>
+    <div class="modal-box max-w-md relative bg-gray-900 border border-gray-800">
+      <label for="redirect-modal" class="btn btn-sm btn-circle absolute right-2 top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2 text-white">Utwórz przekierowanie → produkt <span id="rm-id" class="text-gray-400"></span></h3>
       <div id="rm-alert" class="hidden alert mb-3"></div>
       <form id="redirect-form" onsubmit="return saveProductRedirect(event)">
         <div class="form-control mb-3">
-          <label class="label"><span class="label-text">Źródłowy URL (np. /stara-strona)</span></label>
+          <label class="label"><span class="label-text text-gray-300">Źródłowy URL (np. /stara-strona)</span></label>
           <input type="text" id="rm-source" class="input input-bordered w-full" placeholder="/stara-strona" />
         </div>
         <div class="form-control mb-3">
-          <label class="label"><span class="label-text">Kod HTTP</span></label>
+          <label class="label"><span class="label-text text-gray-300">Kod HTTP</span></label>
           <select id="rm-code" class="select select-bordered w-full">
             <option value="301" selected>301 Moved Permanently</option>
             <option value="302">302 Found (Temporary)</option>
           </select>
         </div>
-        <div class="text-xs opacity-70 mb-3">Docelowy: <code id="rm-target" class="break-all"></code></div>
+        <div class="text-xs text-gray-400 mb-3">Docelowy: <code id="rm-target" class="break-all text-gray-300"></code></div>
         <div class="modal-action">
           <label for="redirect-modal" class="btn">Anuluj</label>
           <button class="btn btn-primary" type="submit">Utwórz</button>
@@ -743,40 +743,40 @@
   <!-- Promotion modal -->
   <input type="checkbox" id="promo-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box max-w-md relative">
-      <label for="promo-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
-      <h3 class="font-bold text-lg mb-2">Utwórz promocję → produkt <span id="pm-id" class="opacity-60"></span></h3>
+    <div class="modal-box max-w-md relative bg-gray-900 border border-gray-800">
+      <label for="promo-modal" class="btn btn-sm btn-circle absolute right-2 top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2 text-white">Utwórz promocję → produkt <span id="pm-id" class="text-gray-400"></span></h3>
       <div id="pm-alert" class="hidden alert mb-3"></div>
       <form id="promo-form" onsubmit="return saveProductPromo(event)">
         <div class="form-control mb-3">
-          <label class="label"><span class="label-text">Typ promocji</span></label>
+          <label class="label"><span class="label-text text-gray-300">Typ promocji</span></label>
           <div class="flex gap-4">
             <label class="cursor-pointer flex items-center gap-2">
               <input type="radio" name="pm-mode" value="amount" class="radio radio-sm" checked />
-              <span>Kwotowa (PLN)</span>
+              <span class="text-gray-300">Kwotowa (PLN)</span>
             </label>
             <label class="cursor-pointer flex items-center gap-2">
               <input type="radio" name="pm-mode" value="percent" class="radio radio-sm" />
-              <span>Procentowa (%)</span>
+              <span class="text-gray-300">Procentowa (%)</span>
             </label>
           </div>
         </div>
         <div class="form-control mb-3">
-          <label class="label"><span class="label-text">Wartość</span></label>
+          <label class="label"><span class="label-text text-gray-300">Wartość</span></label>
           <input type="number" id="pm-value" class="input input-bordered w-full" step="0.01" placeholder="np. 10" />
-          <div class="text-xs opacity-70 mt-1">Dla trybu procentowego podaj procent (np. 10 = 10%).</div>
+          <div class="text-xs text-gray-400 mt-1">Dla trybu procentowego podaj procent (np. 10 = 10%).</div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="form-control">
-            <label class="label"><span class="label-text">Data od</span></label>
+            <label class="label"><span class="label-text text-gray-300">Data od</span></label>
             <input type="datetime-local" id="pm-from" class="input input-bordered w-full" />
           </div>
           <div class="form-control">
-            <label class="label"><span class="label-text">Data do</span></label>
+            <label class="label"><span class="label-text text-gray-300">Data do</span></label>
             <input type="datetime-local" id="pm-to" class="input input-bordered w-full" />
           </div>
         </div>
-        <div class="text-xs opacity-70 mt-2">Cena bazowa: <span id="pm-base-price" class="font-mono"></span></div>
+        <div class="text-xs text-gray-400 mt-2">Cena bazowa: <span id="pm-base-price" class="font-mono text-gray-300"></span></div>
         <div class="modal-action">
           <label for="promo-modal" class="btn">Anuluj</label>
           <button class="btn btn-primary" type="submit">Utwórz promocję</button>
@@ -857,42 +857,42 @@
   <!-- Duplicate modal -->
   <input type="checkbox" id="duplicate-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box max-w-md relative">
-      <label for="duplicate-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Zamknij">✕</label>
-      <h3 class="font-bold text-lg mb-2">Duplikuj produkt <span id="dup-id" class="opacity-60"></span></h3>
+    <div class="modal-box max-w-md relative bg-gray-900 border border-gray-800">
+      <label for="duplicate-modal" class="btn btn-sm btn-circle absolute right-2 top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2 text-white">Duplikuj produkt <span id="dup-id" class="text-gray-400"></span></h3>
       <div id="dup-alert" class="hidden alert mb-3"></div>
       <form id="duplicate-form" onsubmit="return saveProductDuplicate(event)">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="form-control">
-            <label class="label"><span class="label-text">Ile kopii</span></label>
+            <label class="label"><span class="label-text text-gray-300">Ile kopii</span></label>
             <input type="number" id="dup-count" min="1" max="50" value="2" class="input input-bordered w-full" />
           </div>
           <div class="form-control">
-            <label class="label"><span class="label-text">Dodaj indeks</span></label>
+            <label class="label"><span class="label-text text-gray-300">Dodaj indeks</span></label>
             <label class="cursor-pointer flex items-center gap-2">
               <input type="checkbox" id="dup-add-index" class="checkbox checkbox-sm" checked />
-              <span class="text-sm">-1, -2, ...</span>
+              <span class="text-sm text-gray-300">-1, -2, ...</span>
             </label>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
           <div class="form-control">
-            <label class="label"><span class="label-text">Prefiks kodu</span></label>
+            <label class="label"><span class="label-text text-gray-300">Prefiks kodu</span></label>
             <input type="text" id="dup-prefix" class="input input-bordered w-full" placeholder="np. NEW-" />
           </div>
           <div class="form-control">
-            <label class="label"><span class="label-text">Sufiks kodu</span></label>
+            <label class="label"><span class="label-text text-gray-300">Sufiks kodu</span></label>
             <input type="text" id="dup-suffix" class="input input-bordered w-full" placeholder="np. -COPY" />
           </div>
         </div>
         <div class="form-control mt-2">
           <label class="cursor-pointer flex items-center gap-2">
             <input type="checkbox" id="dup-bump-name" class="checkbox checkbox-sm" checked />
-            <span class="text-sm">Dodaj indeks do nazwy</span>
+            <span class="text-sm text-gray-300">Dodaj indeks do nazwy</span>
           </label>
         </div>
-        <div class="text-xs opacity-70 mt-1">Bazowy kod: <span id="dup-base-code" class="font-mono"></span></div>
-        <div class="text-xs opacity-70">Podgląd nowego kodu: <span id="dup-preview" class="font-mono"></span></div>
+        <div class="text-xs text-gray-400 mt-1">Bazowy kod: <span id="dup-base-code" class="font-mono text-gray-300"></span></div>
+        <div class="text-xs text-gray-400">Podgląd nowego kodu: <span id="dup-preview" class="font-mono text-gray-300"></span></div>
         <div class="modal-action">
           <label for="duplicate-modal" class="btn">Anuluj</label>
           <button class="btn btn-primary" type="submit">Duplikuj</button>

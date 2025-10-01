@@ -52,8 +52,8 @@
 <label for="fields-modal" class="btn btn-primary">Wybierz atrybuty</label>
 <input type="checkbox" id="fields-modal" class="modal-toggle" checked />
 <div class="modal">
-  <div class="modal-box max-w-5xl">
-    <h3 class="font-bold text-lg mb-4">Wybierz atrybuty do wyświetlania</h3>
+  <div class="modal-box max-w-5xl bg-gray-900 border border-gray-800">
+    <h3 class="font-bold text-lg mb-4 text-white">Wybierz atrybuty do wyświetlania</h3>
     <form method="post" class="space-y-4">
       {% csrf_token %}
       <div class="flex items-center gap-2 mb-2">
@@ -76,9 +76,9 @@
               {% endif %}
             </tr>
           </thead>
-          <tbody>
+          <tbody class="text-gray-300">
           {% for key in fields %}
-            <tr class="{% if key in selected_keys %}bg-blue-50{% endif %}">
+            <tr class="{% if key in selected_keys %}bg-gray-800{% endif %} border-b border-gray-800">
               <td>
                 <input type="checkbox" name="fields" value="{{ key }}" class="checkbox"
                   {% if key in selected_keys %}checked{% endif %} />
