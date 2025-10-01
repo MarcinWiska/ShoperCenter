@@ -15,8 +15,14 @@
 
 <div class="overflow-x-auto">
   {% if module.resource == 'products' %}
+    {{ columns|json_script:"module-columns-data" }}
+    {{ core_settings_data|json_script:"core-settings-data" }}
     <!-- Spreadsheet-like grid for products -->
     <div class="mb-3 flex items-center gap-2 flex-wrap">
+      <button id="createProductBtn" class="btn btn-success btn-sm">
+        <i class="fas fa-plus mr-2"></i>
+        Dodaj produkt
+      </button>
       <button id="bulkSyncBtn" class="btn btn-primary btn-sm">
         <i class="fas fa-sync mr-2"></i>
         Zapisz zmiany (<span id="unsavedCount">0</span>)
@@ -113,8 +119,9 @@
         if (!data.ok) throw new Error(data.error || 'Błąd pobierania danych');
 
         // Build Tabulator columns; use custom nestedFieldSeparator so dotted keys are literal
+        window.__gridColumnsMeta = data.columns || [];
         editableKeys = [];
-        
+
         // Add row selection column - simple Tabulator built-in
         const cols = [
           {
@@ -423,9 +430,545 @@
         {% endfor %}
       </tbody>
     </table>
-  {% endif %}
+{% endif %}
 </div>
 
+{% if module.resource == 'products' %}
+  <!-- Create product modal -->
+  <input type="checkbox" id="product-create-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box max-w-2xl relative bg-gray-900 border border-gray-800">
+      <label for="product-create-modal" class="btn btn-sm btn-circle absolute right-2 top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2 text-white">Dodaj nowy produkt</h3>
+      <p class="text-xs text-gray-400 mb-3">ID produktu zostanie nadane automatycznie przez Shoper po zapisaniu.</p>
+      <div id="pcm-alert" class="hidden alert mb-3"></div>
+      <form id="product-create-form" class="space-y-5">
+        <div>
+          <h4 class="text-sm font-semibold text-gray-200 mb-2">Pola obowiązkowe</h4>
+          <div id="pcm-mandatory-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold text-gray-200 mb-2">Pola dodatkowe</h4>
+          {% if core_settings %}
+            <div class="text-xs text-gray-400 mb-2">
+              Domyślne ustawienia: VAT <span class="font-semibold text-gray-200">{{ core_settings.get_default_vat_rate_display }}</span>, stan magazynowy <span class="font-semibold text-gray-200">{{ core_settings.default_stock_level }}</span>.
+            </div>
+          {% endif %}
+          <div class="form-control mb-2">
+            <label class="label"><span class="label-text">Dodaj pole</span></label>
+            <select id="pcm-optional-select" class="select select-bordered">
+              <option value="">-- wybierz pole --</option>
+            </select>
+            <span class="text-xs opacity-70 mt-1">Lista zawiera pola z konfiguracji modułu (jak w edycji) z pominięciem obowiązkowych.</span>
+          </div>
+          <div id="pcm-optional-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+        <div class="modal-action">
+          <label for="product-create-modal" class="btn">Anuluj</label>
+          <button type="submit" class="btn btn-primary">Utwórz</button>
+        </div>
+      </form>
+    </div>
+    <label class="modal-backdrop" for="product-create-modal">Zamknij</label>
+  </div>
+
+  <script>
+    const pcmMandatoryFields = [
+      {
+        key: 'category_id',
+        label: 'Kategoria (ID)',
+        type: 'number',
+        required: true,
+        expectInt: true,
+        description: 'Główna kategoria produktu z panelu Shopera.',
+      },
+      {
+        key: 'code',
+        label: 'Kod produktu',
+        type: 'text',
+        required: true,
+        description: 'Unikalny kod / SKU wykorzystywany w sklepie.',
+      },
+      {
+        key: 'pkwiu',
+        label: 'PKWiU',
+        type: 'text',
+        required: true,
+        description: 'Kod PKWiU wymagany przez Shoper API.',
+      },
+      {
+        key: 'stock.price',
+        label: 'Cena bazowa (brutto)',
+        type: 'number',
+        required: true,
+        step: '0.01',
+        min: '0',
+        description: 'Cena podstawowa wariantu głównego. API wymaga wartości > 0.',
+        validate: (value) => (typeof value === 'number' && value > 0) ? null : 'Podaj cenę większą od 0.',
+      },
+      {
+        key: 'translations.pl_PL.name',
+        label: 'Nazwa (pl_PL)',
+        type: 'text',
+        required: true,
+        description: 'Nazwa widoczna w sklepie dla języka pl_PL.',
+      },
+      {
+        key: 'translations.pl_PL.active',
+        label: 'Aktywna (pl_PL)',
+        type: 'bool',
+        required: true,
+        description: 'Widoczność tłumaczenia produktu.',
+        defaultValue: true,
+      },
+    ];
+
+    const pcmMandatoryKeys = new Set(pcmMandatoryFields.map(f => f.key));
+
+    const pcmState = {
+      modulePk: null,
+      optionalSelected: new Set(),
+      metaMap: new Map(),
+    };
+
+    const pcmFallbackColumns = (() => {
+      const el = document.getElementById('module-columns-data');
+      if (!el) return [];
+      try {
+        return JSON.parse(el.textContent || '[]');
+      } catch (err) {
+        console.warn('Nie udało się sparsować module-columns-data', err);
+        return [];
+      }
+    })();
+
+    const coreSettingsData = (() => {
+      const el = document.getElementById('core-settings-data');
+      if (!el) return {};
+      try {
+        const data = JSON.parse(el.textContent || '{}');
+        return data || {};
+      } catch (err) {
+        console.warn('Nie udało się sparsować core-settings-data', err);
+        return {};
+      }
+    })();
+
+    const pcmFieldId = (key) => `pcm-field-${key.replace(/[^a-zA-Z0-9]+/g, '-')}`;
+
+    function pcmEscapeForSelector(value) {
+      if (typeof value !== 'string') return '';
+      if (window.CSS && typeof window.CSS.escape === 'function') {
+        return window.CSS.escape(value);
+      }
+      // Basic fallback escape
+      return value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+    }
+
+    function pcmInferType(key) {
+      if (!key) return 'text';
+      const lower = key.toLowerCase();
+      if (lower.endsWith('_id') || lower.includes('price') || lower.includes('weight') || lower.includes('amount') || lower.includes('qty') || lower.includes('stock')) {
+        return 'number';
+      }
+      if (lower.includes('active') || lower.startsWith('is_') || lower.startsWith('has_')) {
+        return 'bool';
+      }
+      return 'text';
+    }
+
+    function pcmBuildMetaMap() {
+      const map = new Map();
+      const sources = [window.__gridColumnsMeta || [], pcmFallbackColumns || []];
+      sources.forEach(list => {
+        if (!Array.isArray(list)) return;
+        list.forEach(item => {
+          if (!item || !item.key) return;
+          if (map.has(item.key)) return;
+          map.set(item.key, {
+            key: item.key,
+            label: item.label || item.key,
+            type: item.type || pcmInferType(item.key),
+          });
+        });
+      });
+      // Ensure mandatory fields exist with metadata
+      pcmMandatoryFields.forEach(field => {
+        if (!map.has(field.key)) {
+          map.set(field.key, { key: field.key, label: field.label, type: field.type });
+        }
+      });
+      const ensureField = (key, label, type) => {
+        if (!map.has(key)) {
+          map.set(key, { key, label, type });
+        }
+      };
+      ensureField('stock.stock', 'Stan magazynowy', 'number');
+      ensureField('tax_id', 'Stawka VAT (tax_id)', 'text');
+      if (map.has('tax_id')) {
+        const meta = map.get('tax_id');
+        map.set('tax_id', { ...meta, type: 'text' });
+      }
+      return map;
+    }
+
+    function pcmClearAlert() {
+      const box = document.getElementById('pcm-alert');
+      if (!box) return;
+      box.className = 'hidden alert mb-3';
+      box.textContent = '';
+    }
+
+    function pcmShowAlert(kind, message) {
+      const box = document.getElementById('pcm-alert');
+      if (!box) return;
+      const base = 'alert mb-3';
+      box.className = `${base} ${kind === 'error' ? 'alert-error' : 'alert-success'}`;
+      box.textContent = message || '';
+    }
+
+    function pcmRenderField(field, options = {}) {
+      const { required = false, removable = false } = options;
+      const wrap = document.createElement('div');
+      wrap.className = 'form-control relative';
+      wrap.dataset.pcmField = field.key;
+
+      const label = document.createElement('label');
+      label.className = 'label';
+      const labelText = document.createElement('span');
+      labelText.className = 'label-text';
+      labelText.innerHTML = `${field.label || field.key}${required ? ' <span class="text-red-400">*</span>' : ''}<span class="block text-xs opacity-60">${field.key}</span>`;
+      label.appendChild(labelText);
+      wrap.appendChild(label);
+
+      const fieldId = pcmFieldId(field.key);
+      let input;
+
+      if (field.type === 'bool') {
+        const boolWrap = document.createElement('label');
+        boolWrap.className = 'cursor-pointer label justify-start gap-3';
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        input.className = 'toggle toggle-primary';
+        input.id = fieldId;
+        input.name = `pcm__${field.key}`;
+        input.dataset.pcmField = field.key;
+        input.checked = field.defaultValue !== undefined ? !!field.defaultValue : false;
+        const span = document.createElement('span');
+        span.className = 'label-text';
+        span.textContent = input.checked ? 'Tak' : 'Nie';
+        input.addEventListener('change', () => { span.textContent = input.checked ? 'Tak' : 'Nie'; });
+        boolWrap.appendChild(input);
+        boolWrap.appendChild(span);
+        wrap.appendChild(boolWrap);
+      } else {
+        input = document.createElement('input');
+        input.type = field.type === 'number' ? 'number' : 'text';
+        input.className = 'input input-bordered w-full';
+        input.id = fieldId;
+        input.name = `pcm__${field.key}`;
+        input.dataset.pcmField = field.key;
+        if (required) input.required = true;
+        if (field.placeholder) input.placeholder = field.placeholder;
+        if (field.type === 'number') {
+          if (field.step) input.step = field.step;
+          if (field.min !== undefined) input.min = field.min;
+        }
+        wrap.appendChild(input);
+      }
+
+      if (field.description) {
+        const note = document.createElement('div');
+        note.className = 'text-xs opacity-70 mt-1';
+        note.textContent = field.description;
+        wrap.appendChild(note);
+      }
+
+      if (removable) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-xs btn-circle absolute right-0 -top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600';
+        btn.innerHTML = '&times;';
+        btn.addEventListener('click', () => pcmRemoveOptionalField(field.key));
+        wrap.appendChild(btn);
+      }
+
+      return wrap;
+    }
+
+    function pcmRenderMandatoryFields() {
+      const container = document.getElementById('pcm-mandatory-fields');
+      if (!container) return;
+      container.innerHTML = '';
+      pcmMandatoryFields.forEach(field => {
+        container.appendChild(pcmRenderField(field, { required: true }));
+      });
+    }
+
+    function pcmUpdateOptionalSelect() {
+      const select = document.getElementById('pcm-optional-select');
+      if (!select) return;
+      const metaList = Array.from(pcmState.metaMap.values());
+      select.innerHTML = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = '-- wybierz pole --';
+      select.appendChild(defaultOpt);
+      let available = 0;
+      metaList.forEach(meta => {
+        if (!meta.key) return;
+        if (pcmMandatoryKeys.has(meta.key)) return;
+        if (pcmState.optionalSelected.has(meta.key)) return;
+        available += 1;
+        const opt = document.createElement('option');
+        opt.value = meta.key;
+        opt.textContent = meta.label || meta.key;
+        select.appendChild(opt);
+      });
+      select.disabled = available === 0;
+    }
+
+    function pcmHandleOptionalSelect(event) {
+      const key = event.target.value;
+      if (!key) return;
+      pcmAddOptionalField(key);
+      event.target.value = '';
+    }
+
+    function pcmAddOptionalField(key) {
+      if (pcmState.optionalSelected.has(key)) return;
+      const meta = pcmState.metaMap.get(key) || { key, label: key, type: pcmInferType(key) };
+      pcmState.optionalSelected.add(key);
+      const container = document.getElementById('pcm-optional-fields');
+      if (container) {
+        container.appendChild(pcmRenderField(meta, { removable: true }));
+      }
+      pcmUpdateOptionalSelect();
+    }
+
+    function pcmRemoveOptionalField(key) {
+      pcmState.optionalSelected.delete(key);
+      const container = document.getElementById('pcm-optional-fields');
+      if (container) {
+        const el = container.querySelector(`[data-pcm-field="${pcmEscapeForSelector(key)}"]`);
+        if (el) el.remove();
+      }
+      pcmUpdateOptionalSelect();
+    }
+
+    function pcmParseNumber(raw, expectInt = false) {
+      if (raw === null || raw === undefined) return null;
+      if (typeof raw === 'number') return raw;
+      const normalized = String(raw).replace(',', '.').trim();
+      if (normalized === '') return null;
+      const num = expectInt ? parseInt(normalized, 10) : parseFloat(normalized);
+      return Number.isNaN(num) ? null : num;
+    }
+
+    function pcmSetNested(target, path, value) {
+      const parts = path.split('.');
+      let cur = target;
+      parts.forEach((part, idx) => {
+        if (idx === parts.length - 1) {
+          cur[part] = value;
+        } else {
+          if (!Object.prototype.hasOwnProperty.call(cur, part) || typeof cur[part] !== 'object' || cur[part] === null) {
+            cur[part] = {};
+          }
+          cur = cur[part];
+        }
+      });
+    }
+
+    function pcmCollectFieldValue(field) {
+      const input = document.getElementById(pcmFieldId(field.key));
+      if (!input) {
+        return { error: `Brak pola ${field.key}` };
+      }
+      if (field.type === 'bool') {
+        return { value: input.checked };
+      }
+      const raw = input.value.trim();
+      if (field.required && raw === '') {
+        return { error: `Pole "${field.label}" jest wymagane.` };
+      }
+      let value = raw;
+      if (field.type === 'number') {
+        value = pcmParseNumber(raw, field.expectInt);
+        if (field.required && (value === null || Number.isNaN(value))) {
+          return { error: `Podaj poprawną wartość w polu "${field.label}".` };
+        }
+      }
+      if (field.expectInt && value !== null) {
+        if (!Number.isInteger(value)) {
+          return { error: `Pole "${field.label}" wymaga liczby całkowitej.` };
+        }
+      }
+      if (field.validate) {
+        const err = field.validate(value);
+        if (err) return { error: err };
+      }
+      return { value };
+    }
+
+    function pcmCollectOptionalValue(fieldMeta) {
+      const input = document.getElementById(pcmFieldId(fieldMeta.key));
+      if (!input) return { skip: true };
+      if (fieldMeta.type === 'bool') {
+        return { value: input.checked };
+      }
+      const raw = input.value.trim();
+      if (raw === '') {
+        return { skip: true };
+      }
+      if (fieldMeta.type === 'number') {
+        const expectInt = fieldMeta.key.toLowerCase().endsWith('_id');
+        const value = pcmParseNumber(raw, expectInt);
+        if (value === null) {
+          return { error: `Nieprawidłowa liczba w polu "${fieldMeta.label || fieldMeta.key}".` };
+        }
+        if (expectInt && !Number.isInteger(value)) {
+          return { error: `Pole "${fieldMeta.label || fieldMeta.key}" wymaga liczby całkowitej.` };
+        }
+        return { value };
+      }
+      return { value: raw };
+    }
+
+    function pcmResetForm() {
+      pcmRenderMandatoryFields();
+      const optionalContainer = document.getElementById('pcm-optional-fields');
+      if (optionalContainer) optionalContainer.innerHTML = '';
+      pcmState.optionalSelected.clear();
+      pcmState.metaMap = pcmBuildMetaMap();
+      if (coreSettingsData && coreSettingsData.stock_level !== undefined && coreSettingsData.stock_level !== null) {
+        if (!pcmState.metaMap.has('stock.stock')) {
+          pcmState.metaMap.set('stock.stock', { key: 'stock.stock', label: 'Stan magazynowy', type: 'number' });
+        }
+        pcmAddOptionalField('stock.stock');
+        const stockInput = document.getElementById(pcmFieldId('stock.stock'));
+        if (stockInput) {
+          stockInput.value = String(coreSettingsData.stock_level);
+        }
+      }
+      if (coreSettingsData && coreSettingsData.vat_rate) {
+        if (!pcmState.metaMap.has('tax_id')) {
+          pcmState.metaMap.set('tax_id', { key: 'tax_id', label: 'Stawka VAT (tax_id)', type: 'text' });
+        }
+        pcmAddOptionalField('tax_id');
+        const vatInput = document.getElementById(pcmFieldId('tax_id'));
+        if (vatInput) {
+          vatInput.value = String(coreSettingsData.vat_rate);
+        }
+      }
+      pcmUpdateOptionalSelect();
+      // Focus first input shortly after render
+      setTimeout(() => {
+        const firstField = document.getElementById(pcmFieldId(pcmMandatoryFields[0].key));
+        if (firstField && typeof firstField.focus === 'function') firstField.focus();
+      }, 60);
+    }
+
+    function openProductCreateModal(modulePk) {
+      pcmState.modulePk = modulePk || pcmState.modulePk;
+      pcmClearAlert();
+      pcmResetForm();
+      const checkbox = document.getElementById('product-create-modal');
+      if (checkbox) checkbox.checked = true;
+    }
+
+    function closeProductCreateModal() {
+      const checkbox = document.getElementById('product-create-modal');
+      if (checkbox) checkbox.checked = false;
+    }
+
+    async function saveProductCreate(event) {
+      event.preventDefault();
+      pcmClearAlert();
+      const payload = {};
+
+      for (const field of pcmMandatoryFields) {
+        const { value, error } = pcmCollectFieldValue(field);
+        if (error) {
+          pcmShowAlert('error', error);
+          return false;
+        }
+        if (field.type === 'bool') {
+          pcmSetNested(payload, field.key, !!value);
+        } else if (field.type === 'number') {
+          pcmSetNested(payload, field.key, value);
+        } else {
+          pcmSetNested(payload, field.key, value);
+        }
+      }
+
+      // Ensure translations locale exists even if bool/text handled separately
+      if (!payload.translations) payload.translations = {};
+      if (!payload.translations.pl_PL) payload.translations.pl_PL = {};
+
+      for (const key of pcmState.optionalSelected) {
+        const meta = pcmState.metaMap.get(key) || { key, label: key, type: pcmInferType(key) };
+        const { value, error, skip } = pcmCollectOptionalValue(meta);
+        if (error) {
+          pcmShowAlert('error', error);
+          return false;
+        }
+        if (skip) continue;
+        pcmSetNested(payload, key, value);
+      }
+
+      if (!payload.stock) payload.stock = {};
+      if (payload.stock.active === undefined) payload.stock.active = true;
+      if (payload.stock.default === undefined) payload.stock.default = true;
+
+      const csrftoken = getCookie ? getCookie('csrftoken') : '';
+
+      try {
+        const resp = await fetch(`/modules/${pcmState.modulePk || {{ module.pk }}}/products/create.json`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRFToken': csrftoken || '',
+          },
+          body: JSON.stringify({ payload }),
+        });
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Nie udało się utworzyć produktu.');
+        }
+        const newId = data.product_id || data.id || data.created_id;
+        pcmShowAlert('success', newId ? `Produkt utworzony (ID: ${newId}).` : 'Produkt utworzony.');
+        setTimeout(() => {
+          closeProductCreateModal();
+          const refreshBtn = document.getElementById('refreshGridBtn');
+          if (refreshBtn) refreshBtn.click();
+        }, 900);
+        return false;
+      } catch (error) {
+        pcmShowAlert('error', error.message || 'Wystąpił błąd podczas tworzenia produktu.');
+        return false;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('createProductBtn');
+      if (btn) {
+        btn.addEventListener('click', () => openProductCreateModal({{ module.pk }}));
+      }
+      const form = document.getElementById('product-create-form');
+      if (form) {
+        form.addEventListener('submit', saveProductCreate);
+      }
+      const select = document.getElementById('pcm-optional-select');
+      if (select) {
+        select.addEventListener('change', pcmHandleOptionalSelect);
+      }
+    });
+
+    window.openProductCreateModal = openProductCreateModal;
+  </script>
+{% endif %}
 {% if module.resource == 'products' %}
   <!-- Modal toggle -->
   <input type="checkbox" id="product-edit-modal" class="modal-toggle" />

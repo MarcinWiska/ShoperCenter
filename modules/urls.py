@@ -6,6 +6,7 @@ from .views import (
     configure_fields,
     configure_fields_json,
     module_data_json,
+    product_create_json,
     products_bulk_update_json,
     products_bulk_delete_json,
     product_edit,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('<int:pk>/configure.json', configure_fields_json, name='configure_json'),
     # Data feed + bulk operations for spreadsheet UI (products only)
     path('<int:pk>/data.json', module_data_json, name='data_json'),
+    path('<int:pk>/products/create.json', product_create_json, name='product_create_json'),
     path('<int:pk>/products/bulk_update.json', products_bulk_update_json, name='products_bulk_update_json'),
     path('<int:pk>/products/bulk_delete.json', products_bulk_delete_json, name='products_bulk_delete_json'),
     # Product editing (only for products modules)

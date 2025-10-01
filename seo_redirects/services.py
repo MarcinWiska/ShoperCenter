@@ -148,6 +148,7 @@ def sync_redirect_rule(rule: RedirectRule) -> SyncResult:
             target,
             target_type=int(target_type),
             target_object_id=target_object_id,
+            remote_id=rule.remote_id,
         )
         if exists:
             if remote_item:

@@ -2,15 +2,16 @@ from typing import Dict, Any, List
 import logging
 from datetime import datetime, timedelta
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from django.db.models import Count
+from django.shortcuts import render, redirect
 
 from shops.models import Shop
 from modules.models import Module
 from seo_redirects.models import RedirectRule
-from modules.shoper import fetch_rows, build_rest_url, auth_headers
-import requests
+from modules.shoper import fetch_rows, update_product, dot_get, resolve_tax_id
+from accounts.models import CoreSettings
+from .forms import CoreSettingsForm
 
 logger = logging.getLogger(__name__)
 
@@ -209,3 +210,131 @@ def dashboard_view(request):
     }
     
     return render(request, 'dashboard/dashboard.html', context)
+
+
+@login_required
+def core_settings_view(request):
+    """Allow user to manage global VAT and stock defaults used across shops."""
+
+    settings_obj, _created = CoreSettings.objects.get_or_create(owner=request.user)
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'save')
+        form = CoreSettingsForm(request.POST, instance=settings_obj)
+        if form.is_valid():
+            settings_obj = form.save()
+            if action == 'apply_all':
+                summary = apply_core_settings_to_products(request.user, settings_obj)
+                success_msg = (
+                    f"Zaktualizowano {summary['updated']} z {summary['products_checked']} produktów "
+                    f"w {summary['shops']} sklepach."
+                )
+                messages.success(request, success_msg)
+                if summary['failed']:
+                    messages.warning(
+                        request,
+                        f"Niepowodzenia: {summary['failed']}. Sprawdź szczegóły poniżej.",
+                    )
+                for error in summary['errors'][:5]:
+                    messages.warning(request, error)
+                remaining = max(0, len(summary['errors']) - 5)
+                if remaining:
+                    messages.warning(request, f"…oraz {remaining} innych błędów (zobacz logi).")
+            else:
+                messages.success(request, 'Zapisano ustawienia główne.')
+            return redirect('dashboard:core_settings')
+    else:
+        form = CoreSettingsForm(instance=settings_obj)
+
+    return render(request, 'dashboard/core_settings.html', {
+        'form': form,
+        'settings_obj': settings_obj,
+    })
+
+
+def apply_core_settings_to_products(user, settings_obj) -> Dict[str, Any]:
+    """Apply core VAT and stock defaults to every product across user's shops."""
+
+    summary = {
+        'shops': 0,
+        'products_checked': 0,
+        'updated': 0,
+        'skipped': 0,
+        'failed': 0,
+        'errors': [],
+    }
+
+    shops = Shop.objects.filter(owner=user)
+    summary['shops'] = shops.count()
+
+    vat_value = settings_obj.default_vat_rate
+    desired_stock = settings_obj.default_stock_level
+
+    id_candidates = [
+        'product_id',
+        'id',
+        'product.id',
+        'product.product_id',
+        'productId',
+        'productID',
+        'id_product',
+    ]
+
+    for shop in shops:
+        try:
+            products = fetch_rows(shop.base_url, shop.bearer_token, 'products', limit=0)
+        except Exception as exc:
+            logger.error("Failed to fetch products for shop %s: %s", shop.id, exc)
+            summary['errors'].append(f"{shop.name}: {exc}")
+            continue
+
+        resolved_tax_id = None
+        tax_lookup_failed = False
+        if vat_value:
+            resolved_tax_id = resolve_tax_id(shop.base_url, shop.bearer_token, vat_value)
+            if resolved_tax_id is None:
+                tax_lookup_failed = True
+                logger.warning(
+                    "Nie udało się zmapować stawki VAT '%s' na tax_id dla sklepu %s",
+                    vat_value,
+                    shop.id,
+                )
+
+        for product in products or []:
+            summary['products_checked'] += 1
+            product_id = None
+            for key in id_candidates:
+                product_id = dot_get(product, key)
+                if product_id:
+                    break
+            if not product_id:
+                summary['skipped'] += 1
+                continue
+
+            payload: Dict[str, Any] = {}
+            if desired_stock is not None:
+                payload.setdefault('stock', {})['stock'] = desired_stock
+            if resolved_tax_id is not None:
+                payload['tax_id'] = resolved_tax_id
+
+            if not payload:
+                summary['skipped'] += 1
+                continue
+
+            try:
+                ok, msg = update_product(shop.base_url, shop.bearer_token, product_id, payload)
+                if ok:
+                    summary['updated'] += 1
+                else:
+                    summary['failed'] += 1
+                    summary['errors'].append(f"{shop.name} / produkt {product_id}: {msg}")
+            except Exception as exc:
+                summary['failed'] += 1
+                summary['errors'].append(f"{shop.name} / produkt {product_id}: {exc}")
+
+        if tax_lookup_failed:
+            summary['errors'].append(
+                f"{shop.name}: Nie znaleziono w API stawki VAT odpowiadającej wartości '{vat_value}' — pominięto aktualizację VAT."
+            )
+
+    return summary

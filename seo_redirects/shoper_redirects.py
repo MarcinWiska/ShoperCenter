@@ -1,8 +1,17 @@
 from typing import Optional, Tuple, Dict, Any, List
 from urllib.parse import urljoin, urlparse
+import time
+
 import requests
 
-from modules.shoper import build_rest_roots, auth_headers, extract_items, _try_get_json
+from modules.shoper import (
+    build_rest_roots,
+    auth_headers,
+    extract_items,
+    _try_get_json,
+    fetch_rows,
+    fetch_item,
+)
 
 
 def post_redirect(base_url: str, token: str, payloads: List[dict]) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
@@ -146,22 +155,37 @@ def build_payloads(
 
 def list_redirects(base_url: str, token: str, limit: int = 200) -> List[Dict[str, Any]]:
     """Fetch existing redirects from Shopera. Returns list of dicts as-is from API."""
-    for root in build_rest_roots(base_url):
-        candidates = [
-            urljoin(root, f"redirects?limit={limit}"),
-            urljoin(root, "redirects"),
-            urljoin(root, f"seo/redirects?limit={limit}"),
-            urljoin(root, "seo/redirects"),
-            urljoin(root, f"redirects/list?limit={limit}"),
-        ]
-        for url in candidates:
-            data, _ = _try_get_json(url, token)
-            if data is None:
-                continue
-            items = extract_items(data)
+    page_limit = max(limit, 0)
+    for path in ('redirects', 'seo/redirects', 'redirects/list'):
+        try:
+            items = fetch_rows(base_url, token, path, limit=page_limit)
             if items:
                 return items
+        except Exception:
+            # Fallback to manual probing when fetch_rows cannot reach the endpoint
+            pass
+
+        for root in build_rest_roots(base_url):
+            candidates = [
+                urljoin(root, f"{path}?limit={limit}"),
+                urljoin(root, path),
+            ]
+            for url in candidates:
+                data, _ = _try_get_json(url, token)
+                if data is None:
+                    continue
+                items = extract_items(data)
+                if items:
+                    return items
     return []
+
+
+def fetch_redirect_by_id(base_url: str, token: str, remote_id: str) -> Optional[Dict[str, Any]]:
+    item = fetch_item(base_url, token, 'redirects', remote_id)
+    if item:
+        return item
+    # Some instances expose redirects under /seo/redirects/{id}
+    return fetch_item(base_url, token, 'seo/redirects', remote_id)
 
 
 def parse_remote_redirect(
@@ -262,23 +286,37 @@ def was_redirect_created(
     *,
     target_type: Optional[int] = None,
     target_object_id: Optional[int] = None,
+    remote_id: Optional[str] = None,
+    attempts: int = 3,
+    delay_seconds: float = 0.6,
 ) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """Verify by listing if a redirect with given source/target (or metadata) exists."""
     want_src = _norm_path(source_url)
     want_tgt = _norm_path(target_url)
-    items = list_redirects(base_url, token, limit=500)
-    for it in items:
-        src, tgt, _, rid, remote_type, remote_obj = parse_remote_redirect(it)
-        if _norm_path(src) != want_src:
-            continue
 
-        same_target = False
-        if want_tgt and _norm_path(tgt) == want_tgt:
-            same_target = True
-        elif target_type is not None and remote_type == target_type:
-            if target_object_id is None or remote_obj == target_object_id:
+    if remote_id:
+        fetched = fetch_redirect_by_id(base_url, token, str(remote_id))
+        if fetched:
+            return True, fetched
+
+    for attempt in range(max(1, attempts)):
+        items = list_redirects(base_url, token, limit=500)
+        for it in items:
+            src, tgt, _, rid, remote_type, remote_obj = parse_remote_redirect(it)
+            if _norm_path(src) != want_src:
+                continue
+
+            same_target = False
+            if want_tgt and _norm_path(tgt) == want_tgt:
                 same_target = True
+            elif target_type is not None and remote_type == target_type:
+                if target_object_id is None or remote_obj == target_object_id:
+                    same_target = True
 
-        if same_target:
-            return True, it
+            if same_target:
+                return True, it
+
+        if attempt < attempts - 1:
+            time.sleep(delay_seconds)
+
     return False, None

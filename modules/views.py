@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Tuple
+from copy import deepcopy
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -28,7 +29,9 @@ from .shoper import (
     delete_product,
     is_editable_product_field,
     get_recommended_product_fields,
+    resolve_tax_id,
 )
+from accounts.models import CoreSettings
 from seo_redirects.models import RedirectRule
 from seo_redirects.services import sync_redirect_rule
 from seo_redirects.helpers import guess_product_path
@@ -262,7 +265,176 @@ class ModuleDetailView(LoginRequiredMixin, DetailView):
         columns = module.fields_config or []
         ctx['columns'] = columns
         ctx['rows'] = rows_with_id
+        core_settings = None
+        try:
+            core_settings = CoreSettings.objects.select_related(None).filter(owner=self.request.user).first()
+        except Exception:
+            core_settings = None
+        ctx['core_settings'] = core_settings
+        ctx['core_settings_data'] = {
+            'vat_rate': getattr(core_settings, 'default_vat_rate', None),
+            'stock_level': getattr(core_settings, 'default_stock_level', None),
+        }
         return ctx
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_create_json(request: HttpRequest, pk: int):
+    """Create a new product via Shoper API.
+    Expects JSON payload {payload: {...}} with required product fields.
+    Returns {ok, product_id?, message?, row?}.
+    """
+    logger.info("product_create_json called for module %s", pk)
+
+    module = get_object_or_404(Module, pk=pk, owner=request.user)
+    if module.resource != Module.Resource.PRODUCTS:
+        return JsonResponse({'ok': False, 'error': 'Dostępne tylko dla modułu produktów.'}, status=400)
+
+    try:
+        data = json.loads(request.body.decode('utf-8')) if request.body else {}
+    except json.JSONDecodeError:
+        logger.warning("Invalid JSON payload in product_create_json for module %s", pk)
+        return JsonResponse({'ok': False, 'error': 'Nieprawidłowy JSON.'}, status=400)
+
+    payload_input = data.get('payload')
+    if not isinstance(payload_input, dict):
+        return JsonResponse({'ok': False, 'error': 'Brak danych produktu w żądaniu.'}, status=400)
+
+    payload: Dict[str, Any] = deepcopy(payload_input)
+
+    errors: List[str] = []
+
+    # Validate category_id
+    category_id = payload.get('category_id')
+    try:
+        category_id_int = int(category_id)
+        if category_id_int <= 0:
+            raise ValueError
+        payload['category_id'] = category_id_int
+    except (TypeError, ValueError):
+        errors.append('Podaj poprawne ID kategorii (> 0).')
+
+    # Validate string fields
+    code = str(payload.get('code') or '').strip()
+    if not code:
+        errors.append('Kod produktu jest wymagany.')
+    else:
+        payload['code'] = code
+
+    pkwiu = str(payload.get('pkwiu') or '').strip()
+    if not pkwiu:
+        errors.append('PKWiU jest wymagane.')
+    else:
+        payload['pkwiu'] = pkwiu
+
+    # Stock validation
+    stock = payload.get('stock')
+    if not isinstance(stock, dict):
+        stock = {}
+    price_raw = stock.get('price')
+    if isinstance(price_raw, str):
+        price_raw = price_raw.replace(',', '.').strip()
+    try:
+        price_value = float(price_raw)
+    except (TypeError, ValueError):
+        price_value = None
+    if price_value is None:
+        errors.append('Cena bazowa jest wymagana i musi być liczbą.')
+    elif price_value <= 0:
+        errors.append('Cena bazowa musi być większa od 0.')
+    else:
+        stock['price'] = price_value
+    stock['active'] = bool(stock.get('active', True))
+    stock['default'] = bool(stock.get('default', True))
+    payload['stock'] = stock
+
+    # Translations validation (pl_PL mandatory)
+    translations = payload.get('translations')
+    if not isinstance(translations, dict):
+        translations = {}
+    pl_trans = translations.get('pl_PL')
+    if not isinstance(pl_trans, dict):
+        pl_trans = {}
+    name = str(pl_trans.get('name') or '').strip()
+    if not name:
+        errors.append('Nazwa (pl_PL) jest wymagana.')
+    else:
+        pl_trans['name'] = name
+
+    active_val = pl_trans.get('active')
+    if isinstance(active_val, bool):
+        active = active_val
+    elif isinstance(active_val, str):
+        active = active_val.strip().lower() in {'1', 'true', 'tak', 'yes', 'y'}
+    elif isinstance(active_val, (int, float)):
+        active = active_val != 0
+    else:
+        # Default to True if missing
+        active = True
+    pl_trans['active'] = active
+
+    translations['pl_PL'] = pl_trans
+    payload['translations'] = translations
+
+    # Fill defaults from core settings when values are missing
+    core_settings = CoreSettings.objects.filter(owner=request.user).first()
+    if core_settings:
+        vat_default = getattr(core_settings, 'default_vat_rate', None)
+        if vat_default and (payload.get('tax_id') is None or str(payload.get('tax_id')).strip() == ''):
+            resolved_tax_id = resolve_tax_id(module.shop.base_url, module.shop.bearer_token, vat_default)
+            if resolved_tax_id is not None:
+                payload['tax_id'] = resolved_tax_id
+            else:
+                logger.warning(
+                    "Nie udało się zmapować domyślnej stawki VAT '%s' na tax_id dla modułu %s",
+                    vat_default,
+                    pk,
+                )
+
+        stock_value = stock.get('stock') if isinstance(stock, dict) else None
+        if (stock_value is None or stock_value == '') and core_settings.default_stock_level is not None:
+            stock['stock'] = core_settings.default_stock_level
+            payload['stock'] = stock
+
+    if errors:
+        logger.info("Validation errors while creating product in module %s: %s", pk, errors)
+        return JsonResponse({'ok': False, 'error': ' '.join(errors)}, status=400)
+
+    logger.info("Sending product create request for module %s with keys: %s", pk, list(payload.keys()))
+    ok, msg, new_id = create_product(module.shop.base_url, module.shop.bearer_token, payload)
+    if not ok:
+        logger.error("Failed to create product for module %s: %s", pk, msg)
+        return JsonResponse({'ok': False, 'error': msg}, status=502)
+
+    response: Dict[str, Any] = {'ok': True, 'message': msg, 'product_id': new_id}
+
+    # Optionally fetch the newly created product to provide grid row snapshot
+    api_path = resolve_path(module.resource, module.api_path_override) or 'products'
+    if new_id is not None and api_path:
+        try:
+            new_item = fetch_item(module.shop.base_url, module.shop.bearer_token, api_path, new_id)
+            if new_item:
+                row_map: Dict[str, Any] = {'item_id': new_id}
+                for col in module.fields_config or []:
+                    key = col.get('key')
+                    if not key:
+                        continue
+                    val = dot_get(new_item, key)
+                    if isinstance(val, list):
+                        row_map[key] = val
+                    elif isinstance(val, dict):
+                        try:
+                            row_map[key] = json.dumps(val, ensure_ascii=False)
+                        except Exception:
+                            row_map[key] = str(val)
+                    else:
+                        row_map[key] = val
+                response['row'] = row_map
+        except Exception as exc:
+            logger.warning("Failed to fetch newly created product %s: %s", new_id, exc)
+
+    return JsonResponse(response)
 
 
 @login_required

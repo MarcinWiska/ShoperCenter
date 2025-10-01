@@ -1,6 +1,9 @@
 from typing import Dict, List, Any, Optional, Tuple, Union
 from urllib.parse import urljoin
+import hashlib
 import json
+import time
+from decimal import Decimal, InvalidOperation
 
 import requests
 
@@ -17,6 +20,9 @@ RESOURCE_TO_PATH = {
     'taxes': 'taxes',
     'units': 'units',
 }
+
+_TAX_CACHE_TTL_SECONDS = 300
+_TAX_CACHE: Dict[Tuple[str, str], Tuple[float, List[Dict[str, Any]]]] = {}
 
 
 def build_rest_roots(base_url: str) -> List[str]:
@@ -729,6 +735,151 @@ def flatten(obj: Any, prefix: str = '') -> Dict[str, Any]:
     else:
         out[prefix] = obj
     return out
+
+
+def _normalize_tax_descriptor(value: Any) -> str:
+    if value is None:
+        return ''
+
+    if isinstance(value, bool):
+        return ''
+
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            decimal_value = Decimal(str(value))
+            normalized = decimal_value.normalize()
+            return format(normalized, 'f').rstrip('0').rstrip('.')
+        except (InvalidOperation, ValueError):
+            return ''
+
+    text = str(value).strip()
+    if not text:
+        return ''
+
+    lowered = text.lower()
+    lowered = lowered.replace('vat', '').replace('%', '').replace(' ', '')
+    lowered = lowered.replace(',', '.').replace('(', '').replace(')', '').replace("'", '')
+
+    if lowered.startswith('zw'):
+        return 'zw'
+    if lowered.startswith('np'):
+        return 'np'
+
+    try:
+        decimal_value = Decimal(lowered)
+        normalized = decimal_value.normalize()
+        return format(normalized, 'f').rstrip('0').rstrip('.')
+    except (InvalidOperation, ValueError):
+        return lowered
+
+
+def _coerce_tax_id(value: Any) -> Optional[Union[int, str]]:
+    if value is None:
+        return None
+
+    if isinstance(value, int):
+        return value
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    if text.isdigit():
+        try:
+            return int(text)
+        except ValueError:
+            return text
+
+    return text
+
+
+def _extract_tax_id(tax_row: Any) -> Optional[str]:
+    if not isinstance(tax_row, dict):
+        return None
+
+    for key in ('tax_id', 'id', 'taxId', 'taxID', 'value_id'):
+        if key in tax_row and tax_row[key] is not None:
+            text = str(tax_row[key]).strip()
+            if text:
+                return text
+    return None
+
+
+def _tax_cache_key(base_url: str, token: str) -> Tuple[str, str]:
+    hashed_token = hashlib.sha1((token or '').encode('utf-8')).hexdigest()
+    return (base_url.rstrip('/'), hashed_token)
+
+
+def _get_cached_taxes(base_url: str, token: str) -> List[Dict[str, Any]]:
+    import logging
+    logger = logging.getLogger(__name__)
+
+    key = _tax_cache_key(base_url, token)
+    now = time.time()
+    cached = _TAX_CACHE.get(key)
+    if cached and now - cached[0] < _TAX_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        taxes = fetch_rows(base_url, token, 'taxes', limit=0)
+    except Exception as exc:
+        logger.warning(f"Failed to fetch taxes for cache: {exc}")
+        taxes = []
+
+    _TAX_CACHE[key] = (now, taxes)
+    return taxes
+
+
+def resolve_tax_id(base_url: str, token: str, desired_value: Any) -> Optional[Union[int, str]]:
+    """Resolve a human-friendly VAT value (e.g. '23', '23%', 'ZW') to actual tax_id available in API."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    normalized_target = _normalize_tax_descriptor(desired_value)
+    if not normalized_target:
+        return None
+
+    taxes = _get_cached_taxes(base_url, token)
+    if not taxes:
+        logger.warning(f"Brak danych stawek VAT z API podczas próby mapowania '{desired_value}'")
+        return None
+
+    # First, allow users to provide direct tax identifiers
+    for tax in taxes:
+        tax_id_raw = _extract_tax_id(tax)
+        if not tax_id_raw:
+            continue
+        if _normalize_tax_descriptor(tax_id_raw) == normalized_target:
+            resolved_direct = _coerce_tax_id(tax_id_raw)
+            if resolved_direct is not None:
+                logger.debug(f"Resolved VAT '{desired_value}' directly to tax_id {resolved_direct}")
+                return resolved_direct
+
+    # Otherwise match against any descriptive field value
+    for tax in taxes:
+        tax_id_raw = _extract_tax_id(tax)
+        if not tax_id_raw:
+            continue
+
+        flattened = flatten(tax)
+        for candidate in flattened.values():
+            candidate_normalized = _normalize_tax_descriptor(candidate)
+            if not candidate_normalized:
+                continue
+            if candidate_normalized == normalized_target or (
+                normalized_target in {'zw', 'np'} and candidate_normalized.startswith(normalized_target)
+            ):
+                resolved = _coerce_tax_id(tax_id_raw)
+                if resolved is not None:
+                    logger.debug(
+                        "Resolved VAT '%s' to tax_id %s using API data",
+                        desired_value,
+                        resolved,
+                    )
+                    return resolved
+
+    logger.warning(f"Nie znaleziono w API stawki VAT odpowiadającej '{desired_value}'")
+    return None
 
 
 def _try_get_json(url: str, token: str, timeout: int = 12) -> Tuple[Optional[Any], Optional[str]]:

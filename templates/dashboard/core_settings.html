@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}Ustawienia główne — ShoperCenter{% endblock %}
+{% block page_title %}Ustawienia główne{% endblock %}
+{% block page_subtitle %}Domyślne wartości dla produktów we wszystkich sklepach{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="bg-gray-900/60 border border-gray-800 rounded-3xl shadow-xl p-8">
+    <h2 class="text-xl font-semibold text-white mb-4">Domyślne ustawienia produktów</h2>
+    <p class="text-sm text-gray-400 mb-6">
+      Te wartości zostaną automatycznie zaproponowane podczas tworzenia nowych produktów oraz przy innych automatyzacjach w aplikacji.
+    </p>
+
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+      <div>
+        <label class="form-label" for="id_default_vat_rate">{{ form.default_vat_rate.label }}</label>
+        {{ form.default_vat_rate }}
+        {% if form.default_vat_rate.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.default_vat_rate.help_text }}</p>
+        {% endif %}
+        {% for error in form.default_vat_rate.errors %}
+          <p class="text-xs text-red-400 mt-1">{{ error }}</p>
+        {% endfor %}
+      </div>
+
+      <div>
+        <label class="form-label" for="id_default_stock_level">{{ form.default_stock_level.label }}</label>
+        {{ form.default_stock_level }}
+        {% if form.default_stock_level.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.default_stock_level.help_text }}</p>
+        {% endif %}
+        {% for error in form.default_stock_level.errors %}
+          <p class="text-xs text-red-400 mt-1">{{ error }}</p>
+        {% endfor %}
+      </div>
+
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div class="text-xs text-gray-500">
+          <p>Wybierz <strong>Aktualizuj wszystkie produkty</strong>, aby nadpisać VAT i stany magazynowe we wszystkich sklepach jednocześnie.</p>
+        </div>
+        <div class="flex justify-end gap-3">
+          <a href="{% url 'dashboard:home' %}" class="btn">Anuluj</a>
+          <button type="submit" name="action" value="save" class="btn btn-primary">Zapisz</button>
+          <button type="submit" name="action" value="apply_all" class="btn btn-secondary">Aktualizuj wszystkie produkty</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="mt-8 bg-gray-900/40 border border-gray-800 rounded-3xl p-6 text-sm text-gray-400">
+    <h3 class="text-sm font-semibold text-white mb-2">Jak to działa?</h3>
+    <ul class="list-disc list-inside space-y-2">
+      <li>Stawka VAT zostanie automatycznie wpisana do pola <code>tax_id</code> w kreatorze nowego produktu.</li>
+      <li>Domyślny stan magazynowy zasili pole <code>stock.stock</code> w modalach dodawania produktów.</li>
+      <li>Zmiana wartości obowiązuje dla wszystkich Twoich sklepów połączonych w ShoperCenter.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
