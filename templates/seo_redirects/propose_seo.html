@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% block title %}Propozycje SEO URL — {{ shop.name }} — ShoperCenter{% endblock %}
+{% block page_title %}Propozycje SEO URL{% endblock %}
+{% block page_subtitle %}{{ shop.name }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+
+  <!-- Header -->
+  <div class="flex items-center gap-4 mb-8">
+    <a href="{% url 'seo_redirects:list' %}" class="w-12 h-12 bg-gray-800 hover:bg-gray-700 rounded-xl flex items-center justify-center transition-all">
+      <i class="fas fa-arrow-left text-gray-400"></i>
+    </a>
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold text-white">Propozycje SEO URL</h1>
+      <p class="text-sm text-gray-400 mt-1">Wybierz produkty dla których chcesz utworzyć przekierowania</p>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="bg-gradient-to-br from-blue-900/20 to-gray-800 rounded-2xl p-6 border border-blue-800/30 mb-6">
+    <div class="flex items-center gap-4">
+      <div class="flex-1">
+        <div class="text-sm text-gray-400 mb-1">Znaleziono produktów w sklepie</div>
+        <div class="text-3xl font-bold text-white">{{ total_products }}</div>
+      </div>
+      <div class="flex-1">
+        <div class="text-sm text-gray-400 mb-1">Wygenerowano propozycji</div>
+        <div class="text-3xl font-bold text-green-400">{{ shown_count }}</div>
+      </div>
+      <div class="flex-1">
+        <div class="text-sm text-gray-400 mb-1">Już istnieją</div>
+        <div class="text-3xl font-bold text-yellow-400">{{ proposals|length|add:"-"|add:shown_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" id="proposals-form">
+    {% csrf_token %}
+
+    <!-- Actions Bar -->
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 border border-gray-800/50 mb-6 sticky top-4 z-10">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <button type="button" id="select-all" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+            <i class="fas fa-check-double mr-2"></i>
+            Zaznacz wszystkie
+          </button>
+          <button type="button" id="deselect-all" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+            <i class="fas fa-times mr-2"></i>
+            Odznacz wszystkie
+          </button>
+          <span id="selected-count" class="text-sm text-gray-400">
+            Zaznaczono: <span class="text-white font-bold">0</span>
+          </span>
+          <a href="{% url 'seo_redirects:refresh_hierarchy' shop.id %}" 
+             class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all"
+             title="Odśwież hierarchię kategorii z Shoper API">
+            <i class="fas fa-sync mr-2"></i>
+            Odśwież hierarchię ({{ hierarchy_count }})
+          </a>
+        </div>
+        <button type="submit" class="btn-primary" id="save-btn">
+          <i class="fas fa-save mr-2"></i>
+          Utwórz zaznaczone przekierowania
+        </button>
+      </div>
+    </div>
+
+    <!-- Proposals List -->
+    <div class="space-y-4">
+      {% for proposal in proposals %}
+        <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 border border-gray-800/50 hover:border-blue-600/30 transition-all">
+          <!-- Product Header -->
+          <div class="text-white font-medium mb-3 flex items-center gap-2">
+            <i class="fas fa-box text-blue-400 text-sm"></i>
+            {{ proposal.product_name }}
+            <span class="text-xs text-gray-500">#{{ proposal.product_id }}</span>
+            {% if proposal.has_multiple_categories %}
+              <span class="badge badge-info text-xs ml-auto">
+                <i class="fas fa-layer-group mr-1"></i>
+                {{ proposal.categories|length }} kategorii
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Target URL -->
+          <div class="mb-3 bg-gray-950/50 rounded-lg p-3">
+            <div class="text-xs text-gray-400 mb-1">
+              <i class="fas fa-arrow-right text-blue-400 mr-1"></i>
+              Docelowy URL (Shoper):
+            </div>
+            <code class="text-blue-400 font-mono text-sm">
+              {{ proposal.target_url }}
+            </code>
+          </div>
+
+          <!-- Categories Selection -->
+          {% if proposal.has_multiple_categories %}
+            <div class="mb-3">
+              <div class="text-xs text-orange-400 mb-2 flex items-center gap-2">
+                <i class="fas fa-info-circle"></i>
+                Produkt należy do wielu kategorii - wybierz które chcesz utworzyć:
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Category Options -->
+          <div class="space-y-2">
+            {% if proposal.has_multiple_categories %}
+              <!-- Option: All Categories -->
+              <label class="flex items-start gap-3 p-3 bg-gray-950/30 rounded-lg cursor-pointer hover:bg-gray-950/50 transition-all border border-transparent hover:border-purple-500/30">
+                <input 
+                  type="checkbox" 
+                  name="selected_products" 
+                  value="{{ proposal.product_id }}_all"
+                  class="checkbox checkbox-primary proposal-checkbox mt-1"
+                >
+                <div class="flex-1">
+                  <div class="text-purple-400 font-medium text-sm mb-1">
+                    <i class="fas fa-layer-group mr-1"></i>
+                    Wszystkie kategorie ({{ proposal.categories|length }})
+                  </div>
+                  <div class="text-xs text-gray-400">
+                    Utworzy przekierowanie dla każdej kategorii osobno
+                  </div>
+                </div>
+              </label>
+            {% endif %}
+
+            <!-- Individual Categories -->
+            {% for cat in proposal.categories %}
+              <label class="flex items-start gap-3 p-3 bg-gray-950/30 rounded-lg cursor-pointer hover:bg-gray-950/50 transition-all border border-transparent hover:border-green-500/30 {% if cat.already_exists %}opacity-50{% endif %}">
+                <input 
+                  type="checkbox" 
+                  name="selected_products" 
+                  value="{{ proposal.product_id }}_{{ cat.category_id }}"
+                  class="checkbox checkbox-success proposal-checkbox mt-1"
+                  {% if cat.already_exists %}disabled{% endif %}
+                >
+                <div class="flex-1">
+                  <div class="text-white text-sm mb-1 flex items-center gap-2">
+                    <i class="fas fa-folder text-gray-500 text-xs"></i>
+                    {{ cat.category_path }}
+                    {% if cat.already_exists %}
+                      <span class="badge badge-warning text-xs ml-auto">
+                        <i class="fas fa-check-circle mr-1"></i>
+                        Już istnieje
+                      </span>
+                    {% endif %}
+                  </div>
+                  <code class="block text-green-400 font-mono text-xs mt-1">
+                    {{ cat.seo_url }}
+                  </code>
+                </div>
+              </label>
+            {% endfor %}
+          </div>
+
+        </div>
+      {% empty %}
+        <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-12 border border-gray-800/50 text-center">
+          <i class="fas fa-info-circle text-gray-600 text-4xl mb-4"></i>
+          <p class="text-gray-400">Brak propozycji do wyświetlenia</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Submit Button (bottom) -->
+    <div class="mt-6 text-center pb-8">
+      <button type="submit" class="btn-primary btn-lg">
+        <i class="fas fa-save mr-2"></i>
+        Utwórz zaznaczone przekierowania
+      </button>
+    </div>
+
+    <!-- Bottom Actions -->
+    <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 border border-gray-800/50 mt-6 sticky bottom-4">
+      <div class="flex items-center justify-between">
+        <a href="{% url 'seo_redirects:list' %}" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-6 py-3 rounded-xl font-medium transition-all">
+          <i class="fas fa-arrow-left mr-2"></i>
+          Powrót
+        </a>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-save mr-2"></i>
+          Utwórz <span id="selected-count-bottom" class="font-bold">0</span> przekierowań
+        </button>
+      </div>
+    </div>
+  </form>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const checkboxes = document.querySelectorAll('.proposal-checkbox');
+  const selectAllBtn = document.getElementById('select-all');
+  const deselectAllBtn = document.getElementById('deselect-all');
+  const selectedCountSpan = document.querySelector('#selected-count span');
+  const selectedCountBottom = document.getElementById('selected-count-bottom');
+  const saveBtn = document.getElementById('save-btn');
+
+  function updateCount() {
+    const checked = document.querySelectorAll('.proposal-checkbox:checked').length;
+    selectedCountSpan.textContent = checked;
+    selectedCountBottom.textContent = checked;
+    
+    if (checked === 0) {
+      saveBtn.disabled = true;
+      saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  }
+
+  selectAllBtn.addEventListener('click', function() {
+    checkboxes.forEach(cb => {
+      if (!cb.disabled) cb.checked = true;
+    });
+    updateCount();
+  });
+
+  deselectAllBtn.addEventListener('click', function() {
+    checkboxes.forEach(cb => cb.checked = false);
+    updateCount();
+  });
+
+  checkboxes.forEach(cb => {
+    cb.addEventListener('change', updateCount);
+  });
+
+  // Initial count
+  updateCount();
+
+  // Form submission confirmation
+  document.getElementById('proposals-form').addEventListener('submit', function(e) {
+    const checked = document.querySelectorAll('.proposal-checkbox:checked').length;
+    if (checked === 0) {
+      e.preventDefault();
+      alert('Wybierz przynajmniej jeden produkt');
+      return false;
+    }
+    
+    if (!confirm(`Czy na pewno chcesz utworzyć ${checked} przekierowań SEO?`)) {
+      e.preventDefault();
+      return false;
+    }
+  });
+});
+</script>
+
+{% endblock %}

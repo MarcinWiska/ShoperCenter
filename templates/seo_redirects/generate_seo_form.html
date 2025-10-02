@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% block title %}Generator SEO URL — {{ shop.name }} — ShoperCenter{% endblock %}
+{% block page_title %}Generator SEO URL{% endblock %}
+{% block page_subtitle %}{{ shop.name }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in max-w-4xl mx-auto">
+
+  <!-- Header -->
+  <div class="flex items-center gap-4 mb-8">
+    <a href="{% url 'seo_redirects:list' %}" class="w-12 h-12 bg-gray-800 hover:bg-gray-700 rounded-xl flex items-center justify-center transition-all">
+      <i class="fas fa-arrow-left text-gray-400"></i>
+    </a>
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold text-white">Generator przyjaznych SEO URL</h1>
+      <p class="text-sm text-gray-400 mt-1">Automatycznie generuj przekierowania dla produktów</p>
+    </div>
+  </div>
+
+  <!-- Info Box -->
+  <div class="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-6 mb-8">
+    <div class="flex gap-4">
+      <div class="flex-shrink-0">
+        <i class="fas fa-info-circle text-blue-400 text-2xl"></i>
+      </div>
+      <div class="flex-1">
+        <h3 class="text-lg font-bold text-white mb-2">Tryb ręczny - podaj ID produktów</h3>
+        <div class="text-sm text-gray-300 space-y-2">
+          <p><strong>Dla wygody użyj przycisku "Zaproponuj SEO"</strong> - pokaże listę wszystkich produktów z checkboxami.</p>
+          <p class="pt-2">Ten tryb ręczny pozwala podać konkretne ID produktów. Generator automatycznie tworzy przyjazne URL-e w formacie:</p>
+          <code class="block bg-gray-900 px-4 py-2 rounded-lg text-green-400 font-mono text-xs">
+            /kategoria-glowna/podkategoria/podpodkategoria/nazwa-produktu
+          </code>
+          <p class="pt-2">Przykład dla "Sukienki letnie" w kategorii "Dla niej → Sukienki → Sukienki letnie":</p>
+          <code class="block bg-gray-900 px-4 py-2 rounded-lg text-green-400 font-mono text-xs">
+            /dla-niej/sukienki/sukienki-letnie/sukienka-maxi-czerwona
+          </code>
+          <p class="pt-2">Przekierowanie (typ: <strong class="text-yellow-400">PRODUCT_TO_URL</strong>):</p>
+          <ul class="list-disc list-inside space-y-1 text-gray-400 pl-4">
+            <li><strong class="text-white">Źródłowy URL</strong> - przyjazny SEO URL (od kategorii głównej do szczegółowej)</li>
+            <li><strong class="text-white">Docelowy URL</strong> - systemowy URL produktu w Shoperze</li>
+            <li><strong class="text-white">301 Redirect</strong> - przenosi moc SEO na docelowy URL</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Form -->
+  <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-800/50">
+    <form method="post" id="generate-form">
+      {% csrf_token %}
+      
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-gray-300 mb-2">
+          <i class="fas fa-barcode text-green-400 mr-2"></i>
+          ID produktów
+        </label>
+        <textarea 
+          name="product_ids" 
+          id="product_ids"
+          rows="6" 
+          class="input input-bordered w-full bg-gray-800 border-gray-700 text-gray-100 focus:border-green-500 focus:ring focus:ring-green-500/20 font-mono text-sm"
+          placeholder="Wpisz ID produktów (każde w nowej linii lub oddzielone przecinkami)&#10;Przykład:&#10;123&#10;456&#10;789"
+          required
+        ></textarea>
+        <p class="text-xs text-gray-500 mt-2">
+          <i class="fas fa-lightbulb text-yellow-400 mr-1"></i>
+          Możesz wpisać wiele ID oddzielonych przecinkami, spacjami lub w osobnych liniach
+        </p>
+      </div>
+
+      <!-- Preview Button -->
+      <div class="mb-6">
+        <button 
+          type="button" 
+          id="preview-btn"
+          class="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all border border-blue-600/30 hover:border-blue-600"
+        >
+          <i class="fas fa-eye mr-2"></i>
+          Podgląd pierwszego produktu
+        </button>
+      </div>
+
+      <!-- Preview Result -->
+      <div id="preview-result" class="hidden mb-6 bg-gray-800/50 border border-gray-700 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-3">Podgląd wygenerowanego URL:</h4>
+        <div class="space-y-2 text-sm">
+          <div>
+            <span class="text-gray-400">Źródłowy URL (SEO):</span>
+            <code id="preview-source" class="block mt-1 bg-gray-900 px-3 py-2 rounded text-green-400 font-mono text-xs"></code>
+          </div>
+          <div>
+            <span class="text-gray-400">Docelowy URL (Shoper):</span>
+            <code id="preview-target" class="block mt-1 bg-gray-900 px-3 py-2 rounded text-red-400 font-mono text-xs"></code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-3">
+        <button type="submit" class="btn-primary flex-1">
+          <i class="fas fa-magic mr-2"></i>
+          Generuj przekierowania SEO
+        </button>
+        <a href="{% url 'seo_redirects:list' %}" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-6 py-3 rounded-xl font-medium transition-all">
+          Anuluj
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Examples Section -->
+  <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-800/50 mt-8">
+    <h3 class="text-lg font-bold text-white mb-4">
+      <i class="fas fa-lightbulb text-yellow-400 mr-2"></i>
+      Przykłady wygenerowanych URL
+    </h3>
+    <div class="space-y-3 text-sm">
+      <div class="bg-gray-800/50 rounded-lg p-3">
+        <div class="text-gray-400 mb-1">Produkt prosty:</div>
+        <code class="text-green-400 font-mono text-xs">/narzedzia/wkretarki/wkretarka-udarowa-makita-18v</code>
+      </div>
+      <div class="bg-gray-800/50 rounded-lg p-3">
+        <div class="text-gray-400 mb-1">Produkt z wariantem:</div>
+        <code class="text-green-400 font-mono text-xs">/wkrety/soczewkowe/30mm/wkret-ocynkowany-din-7981-10-sztuk</code>
+      </div>
+      <div class="bg-gray-800/50 rounded-lg p-3">
+        <div class="text-gray-400 mb-1">Produkt z głęboką strukturą kategorii:</div>
+        <code class="text-green-400 font-mono text-xs">/elektronika/smartfony/apple/iphone/iphone-15-pro-max-256gb</code>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const previewBtn = document.getElementById('preview-btn');
+  const previewResult = document.getElementById('preview-result');
+  const previewSource = document.getElementById('preview-source');
+  const previewTarget = document.getElementById('preview-target');
+  const productIdsInput = document.getElementById('product_ids');
+
+  previewBtn.addEventListener('click', async function() {
+    const productIdsText = productIdsInput.value.trim();
+    if (!productIdsText) {
+      alert('Wpisz przynajmniej jedno ID produktu');
+      return;
+    }
+
+    // Parse first product ID
+    const ids = productIdsText.replace(/\n/g, ',').replace(/\s+/g, ',').split(',').filter(id => id.trim());
+    if (ids.length === 0) {
+      alert('Nie znaleziono żadnych ID produktów');
+      return;
+    }
+
+    const firstId = ids[0].trim();
+    
+    // Show loading
+    previewBtn.disabled = true;
+    previewBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Ładowanie...';
+
+    try {
+      const response = await fetch(`{% url 'seo_redirects:preview_seo_url' shop.id %}?product_id=${firstId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        previewSource.textContent = data.seo_url;
+        previewTarget.textContent = data.shoper_url;
+        previewResult.classList.remove('hidden');
+      } else {
+        alert('Błąd: ' + (data.error || 'Nieznany błąd'));
+      }
+    } catch (error) {
+      alert('Błąd połączenia: ' + error.message);
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.innerHTML = '<i class="fas fa-eye mr-2"></i>Podgląd pierwszego produktu';
+    }
+  });
+});
+</script>
+
+{% endblock %}

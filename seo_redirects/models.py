@@ -7,6 +7,47 @@ from shops.models import Shop
 User = get_user_model()
 
 
+class CategoryHierarchy(models.Model):
+    """
+    Przechowuje hierarchię kategorii dla każdego sklepu.
+    Automatycznie budowana na podstawie struktury kategorii w Shoper.
+    """
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name='category_hierarchies')
+    category_id = models.IntegerField(help_text="ID kategorii w Shoper")
+    category_name = models.CharField(max_length=255, help_text="Nazwa kategorii")
+    category_slug = models.SlugField(max_length=255, help_text="Slug kategorii dla URL")
+    
+    # Hierarchia jako JSON - lista slugów od głównej do tej kategorii
+    # Przykład: ["dla-niej", "sukienki", "sukienki-letnie"]
+    path_slugs = models.JSONField(default=list, help_text="Pełna ścieżka slugów")
+    
+    # Poziom w hierarchii (0 = główna kategoria)
+    level = models.IntegerField(default=0, help_text="Poziom zagnieżdżenia (0 = root)")
+    
+    # Metadane
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'seo_category_hierarchy'
+        unique_together = [('shop', 'category_id')]
+        indexes = [
+            models.Index(fields=['shop', 'category_id']),
+            models.Index(fields=['shop', 'level']),
+        ]
+        verbose_name = 'Hierarchia Kategorii'
+        verbose_name_plural = 'Hierarchie Kategorii'
+    
+    def __str__(self):
+        path = ' → '.join(self.path_slugs) if self.path_slugs else self.category_slug
+        return f"{self.shop.name}: {path}"
+    
+    @property
+    def full_path(self):
+        """Zwraca pełną ścieżkę jako string dla URL"""
+        return '/'.join(self.path_slugs) if self.path_slugs else self.category_slug
+
+
 class RedirectRule(models.Model):
     class RuleType(models.TextChoices):
         URL_TO_URL = 'url_to_url', 'URL → URL'
