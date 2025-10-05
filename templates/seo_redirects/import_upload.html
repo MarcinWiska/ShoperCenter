@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Import przekierowań SEO — ShoperCenter{% endblock %}
+{% block page_title %}Import przekierowań SEO{% endblock %}
+{% block page_subtitle %}Wczytaj plik CSV i przygotuj przekierowania do zatwierdzenia{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto animate-fade-in space-y-6">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3 text-sm text-gray-400">
+      <a class="link link-hover" href="{% url 'seo_redirects:list' %}"><i class="fas fa-arrow-left mr-1"></i>Powrót do listy</a>
+    </div>
+    <a class="btn btn-sm" href="{{ sample_url }}"><i class="fas fa-download mr-2"></i>Pobierz przykładowy CSV</a>
+  </div>
+
+  <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-white mb-2">Jak przygotować plik?</h2>
+      <ul class="list-disc list-inside text-sm text-gray-400 space-y-1">
+        <li>Obsługiwane kolumny: <code>rule_type</code>, <code>source_url</code>, <code>product_id</code>, <code>category_id</code>, <code>target_url</code>, <code>status_code</code>, <code>active</code>.</li>
+        <li>W jednym pliku możesz mieszać typy: <em>URL → URL</em>, <em>Product ID → URL</em>, <em>Category ID → URL</em>.</li>
+        <li>Dla reguł produktowych i kategorii podaj obowiązkowo <code>source_url</code> (skąd przekierować) oraz ID.</li>
+        <li>Puste <code>target_url</code> dla produktu/kategorii zostanie uzupełnione ścieżką <code>/product/&lt;ID&gt;</code> lub <code>/category/&lt;ID&gt;</code>.</li>
+      </ul>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="space-y-5">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">
+          {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <label class="label"><span class="label-text">{{ form.shop.label }}</span></label>
+          {{ form.shop }}
+          {% if form.shop.help_text %}<span class="label-text-alt text-xs text-gray-500">{{ form.shop.help_text }}</span>{% endif %}
+          {% for err in form.shop.errors %}<span class="text-xs text-red-400 mt-1">{{ err }}</span>{% endfor %}
+        </div>
+        <div class="form-control">
+          <label class="label"><span class="label-text">{{ form.csv_file.label }}</span></label>
+          {{ form.csv_file }}
+          {% if form.csv_file.help_text %}<span class="label-text-alt text-xs text-gray-500">{{ form.csv_file.help_text }}</span>{% endif %}
+          {% for err in form.csv_file.errors %}<span class="text-xs text-red-400 mt-1">{{ err }}</span>{% endfor %}
+        </div>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-3">
+          {{ form.sync_immediately }}
+          <span class="label-text">{{ form.sync_immediately.label }}</span>
+        </label>
+        {% if form.sync_immediately.help_text %}<span class="text-xs text-gray-500">{{ form.sync_immediately.help_text }}</span>{% endif %}
+        {% for err in form.sync_immediately.errors %}<span class="text-xs text-red-400 mt-1">{{ err }}</span>{% endfor %}
+      </div>
+
+      <div class="pt-3 flex items-center gap-3">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-file-import mr-2"></i>Wczytaj plik</button>
+        <a href="{% url 'seo_redirects:list' %}" class="btn">Anuluj</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

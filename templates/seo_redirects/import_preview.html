@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}Podgląd importu przekierowań — ShoperCenter{% endblock %}
+{% block page_title %}Podgląd importu{% endblock %}
+{% block page_subtitle %}Zweryfikuj rekordy przed zatwierdzeniem importu{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in space-y-6">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3 text-sm text-gray-400">
+      <a class="link link-hover" href="{% url 'seo_redirects:import_upload' %}"><i class="fas fa-arrow-left mr-1"></i>Wróć do wyboru pliku</a>
+      <span>Sklep: <span class="text-white font-medium">{{ shop.name }}</span></span>
+      <span>Plik: <code class="px-2 py-1 bg-gray-800 rounded text-xs">{{ filename }}</code></span>
+    </div>
+    <div class="text-xs text-gray-400">
+      {% if sync_immediately %}
+        <span class="badge badge-success badge-outline"><i class="fas fa-cloud-upload-alt mr-1"></i>Po imporcie nastąpi synchronizacja z Shoper</span>
+      {% else %}
+        <span class="badge badge-warning badge-outline"><i class="fas fa-pause mr-1"></i>Synchronizację wykonasz później</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+      <div class="text-sm text-gray-400">Łącznie wierszy</div>
+      <div class="text-2xl font-semibold text-white">{{ stats.total }}</div>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+      <div class="text-sm text-gray-400">Poprawne</div>
+      <div class="text-2xl font-semibold text-green-400">{{ stats.valid }}</div>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+      <div class="text-sm text-gray-400">Wymagają uwagi</div>
+      <div class="text-2xl font-semibold text-red-400">{{ stats.invalid }}</div>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <div class="flex items-center justify-between bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-400">
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="checkbox checkbox-sm" id="toggle-all" />
+          <span>Zaznacz/odznacz wszystkie poprawne rekordy</span>
+        </label>
+        <span>|</span>
+        <span>Zaznaczone rekordy zostaną zapisane w bazie{% if sync_immediately %} i natychmiast wysłane do Shoper{% endif %}.</span>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" name="action" value="confirm" class="btn btn-primary btn-sm"><i class="fas fa-check mr-2"></i>Importuj zaznaczone</button>
+        <button type="submit" name="action" value="cancel" class="btn btn-sm"><i class="fas fa-times mr-2"></i>Anuluj</button>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="table w-full">
+        <thead class="bg-gray-900 text-gray-400">
+          <tr>
+            <th>Import</th>
+            <th>Typ</th>
+            <th>Źródło</th>
+            <th>Cel</th>
+            <th>HTTP</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm text-gray-300">
+        {% for row in rows %}
+          <tr class="border-b border-gray-800/60 {% if not row.is_valid %}bg-red-900/10{% endif %}">
+            <td class="align-top">
+              {% if row.is_valid %}
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" class="checkbox checkbox-sm row-checkbox" name="selected" value="{{ row.index }}" {% if row.select_default %}checked{% endif %} data-valid="1" />
+                  <span class="text-xs text-gray-500">Linia {{ row.index }}</span>
+                </label>
+              {% else %}
+                <span class="badge badge-error badge-outline">Błąd</span>
+                <div class="text-xs text-gray-500 mt-1">Linia {{ row.index }}</div>
+              {% endif %}
+            </td>
+            <td class="align-top">
+              {% if row.rule_type == 'url_to_url' %}
+                <span class="badge badge-info">URL → URL</span>
+              {% elif row.rule_type == 'product_to_url' %}
+                <span class="badge badge-success">Product ID → URL</span>
+              {% elif row.rule_type == 'category_to_url' %}
+                <span class="badge badge-warning">Category ID → URL</span>
+              {% else %}
+                <span class="badge">{{ row.rule_type|default:'?' }}</span>
+              {% endif %}
+              <div class="mt-2 space-y-1 text-xs text-gray-400">
+                {% if row.product_id %}<div><i class="fas fa-box mr-1"></i>ID produktu: <span class="text-white">{{ row.product_id }}</span></div>{% endif %}
+                {% if row.category_id %}<div><i class="fas fa-sitemap mr-1"></i>ID kategorii: <span class="text-white">{{ row.category_id }}</span></div>{% endif %}
+                <div><i class="fas fa-toggle-on mr-1"></i>Aktywne: <span class="text-white">{{ row.active|yesno:"tak,nie" }}</span></div>
+              </div>
+            </td>
+            <td class="align-top">
+              {% if row.source_url %}
+                <code class="px-2 py-1 bg-gray-800 rounded text-xs text-red-300">{{ row.source_url }}</code>
+              {% else %}
+                <span class="text-xs text-red-400">Brak</span>
+              {% endif %}
+            </td>
+            <td class="align-top">
+              {% if row.target_url %}
+                <code class="px-2 py-1 bg-gray-800 rounded text-xs text-green-300">{{ row.target_url }}</code>
+              {% else %}
+                <span class="text-xs text-yellow-400">Uzupełni Shoper przy synchronizacji</span>
+              {% endif %}
+              {% if row.generated_target %}
+                <div class="text-xs text-gray-500 mt-1"><i class="fas fa-wand-magic-sparkles mr-1"></i>Docelowy URL wygenerowany automatycznie</div>
+              {% endif %}
+            </td>
+            <td class="align-top">
+              <span class="badge {% if row.status_code == 301 %}badge-success{% else %}badge-warning{% endif %}">{{ row.status_code }}</span>
+            </td>
+            <td class="align-top">
+              {% if row.errors %}
+                <div class="space-y-1">
+                  {% for err in row.errors %}
+                    <div class="text-xs text-red-400"><i class="fas fa-exclamation-triangle mr-1"></i>{{ err }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if row.warnings %}
+                <div class="space-y-1 mt-2">
+                  {% for warn in row.warnings %}
+                    <div class="text-xs text-yellow-400"><i class="fas fa-info-circle mr-1"></i>{{ warn }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if row.existing_rule %}
+                <div class="mt-2 text-xs text-gray-400">
+                  <div class="font-semibold text-gray-300">Istniejące przekierowanie:</div>
+                  <div>ID: {{ row.existing_rule.id }} | {{ row.existing_rule.rule_type }}</div>
+                  <div>Cel: {{ row.existing_rule.target_url }}</div>
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-8 text-gray-500">Brak rekordów do wyświetlenia.</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex justify-end gap-2">
+      <button type="submit" name="action" value="confirm" class="btn btn-primary"><i class="fas fa-check mr-2"></i>Importuj zaznaczone</button>
+      <button type="submit" name="action" value="cancel" class="btn"><i class="fas fa-times mr-2"></i>Anuluj</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const toggle = document.getElementById('toggle-all');
+    const checkboxes = Array.from(document.querySelectorAll('.row-checkbox'));
+    if (!toggle) return;
+    toggle.addEventListener('change', function () {
+      checkboxes.forEach(cb => {
+        if (!cb.disabled) {
+          cb.checked = toggle.checked;
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}

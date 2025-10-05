@@ -15,6 +15,7 @@ from .shoper_redirects import (
     was_redirect_created,
     _norm_path,
     parse_remote_redirect,
+    delete_redirect,
 )
 
 
@@ -25,6 +26,13 @@ class SyncResult:
     message: str
     source_url: str = ''
     target_url: str = ''
+
+
+@dataclass
+class DeleteResult:
+    ok: bool
+    level: str  # 'success', 'warning', 'error'
+    message: str
 
 
 def sync_redirect_rule(rule: RedirectRule) -> SyncResult:
@@ -198,3 +206,27 @@ def sync_redirect_rule(rule: RedirectRule) -> SyncResult:
         source_url=source,
         target_url=target,
     )
+
+
+def delete_redirect_rule_remote(rule: RedirectRule) -> DeleteResult:
+    print(f"\n>>> delete_redirect_rule_remote called for rule ID={rule.id}")
+    shop = rule.shop
+    if not shop:
+        print(f">>> ERROR: No shop assigned!")
+        return DeleteResult(False, 'error', 'Przekierowanie nie ma przypisanego sklepu.')
+
+    print(f">>> Calling delete_redirect API for shop={shop.name}, remote_id={rule.remote_id}, source={rule.source_url}")
+    ok, msg = delete_redirect(
+        shop.base_url,
+        shop.bearer_token,
+        remote_id=rule.remote_id,
+        source_url=rule.source_url,
+        target_url=rule.target_url,
+        target_type=rule.target_type,
+        target_object_id=rule.target_object_id,
+    )
+    print(f">>> delete_redirect returned: ok={ok}, msg={msg}")
+
+    if ok:
+        return DeleteResult(True, 'success', msg)
+    return DeleteResult(False, 'warning', msg)

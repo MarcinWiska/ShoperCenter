@@ -1,55 +1,217 @@
 {% extends 'base.html' %}
 {% block title %}Przekierowanie SEO — ShoperCenter{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto card bg-base-100 shadow">
-  <div class="card-body">
-    <h1 class="card-title">{% if object %}Edytuj{% else %}Nowe{% endif %} przekierowanie</h1>
-    <form method="post" class="space-y-4">
+<div class="max-w-2xl mx-auto">
+  <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-800/50 shadow-2xl">
+    <div class="flex items-center gap-4 mb-6">
+      <div class="w-14 h-14 bg-blue-500/10 rounded-xl flex items-center justify-center">
+        <i class="fas fa-{% if object %}edit{% else %}plus{% endif %} text-blue-400 text-2xl"></i>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-white">{% if object %}Edytuj{% else %}Nowe{% endif %} przekierowanie</h1>
+        <p class="text-gray-400 text-sm mt-1">Skonfiguruj przekierowanie SEO dla sklepu</p>
+      </div>
+    </div>
+    
+    <form method="post" class="space-y-6" novalidate data-redirect-form>
       {% csrf_token %}
-      {{ form.non_field_errors }}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="label"><span class="label-text">Sklep</span></label>
-          {{ form.shop }}
-        </div>
-        <div>
-          <label class="label"><span class="label-text">Typ</span></label>
-          {{ form.rule_type }}
-        </div>
-        <div class="md:col-span-2">
-          <div class="alert alert-info text-sm">
-            URL→URL: wypełnij pola „Źródłowy URL” i „Docelowy URL”.
-            Product/Category→URL: podaj odpowiednie ID oraz „Źródłowy URL” (stary adres), a „Docelowy URL” zostanie pobrany automatycznie podczas synchronizacji – możesz go nadpisać, jeśli chcesz wymusić inny adres.
+      {{ form.media }}
+      {% if form.non_field_errors %}
+      <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+        <div class="flex items-center gap-3">
+          <i class="fas fa-exclamation-circle text-red-400"></i>
+          <div class="text-red-300 space-y-1" role="alert">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
           </div>
         </div>
-        <div class="md:col-span-2" data-field="source">
-          <label class="label"><span class="label-text">Źródłowy URL (dla URL→URL lub nadpisanie)</span></label>
-          {{ form.source_url }}
-        </div>
-        <div data-field="product">
-          <label class="label"><span class="label-text">Product ID</span></label>
-          {{ form.product_id }}
-        </div>
-        <div data-field="category">
-          <label class="label"><span class="label-text">Category ID</span></label>
-          {{ form.category_id }}
-        </div>
-        <div class="md:col-span-2 transition-opacity" data-field="target">
-          <label class="label"><span class="label-text">Docelowy URL <span class="text-xs font-normal opacity-60" data-target-hint></span></span></label>
-          {{ form.target_url }}
+      </div>
+      {% endif %}
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-store mr-2 text-gray-500"></i>Sklep
+          </label>
+          {{ form.shop }}
+          {% if form.shop.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.shop.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if form.shop.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.shop.help_text }}</p>
+          {% endif %}
         </div>
         <div>
-          <label class="label"><span class="label-text">Kod</span></label>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-random mr-2 text-gray-500"></i>Typ przekierowania
+          </label>
+          {{ form.rule_type }}
+          {% if form.rule_type.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.rule_type.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if form.rule_type.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.rule_type.help_text }}</p>
+          {% endif %}
+        </div>
+        
+        <div class="md:col-span-2">
+          <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <div class="flex items-start gap-3">
+              <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+              <div class="text-sm text-blue-300">
+                <p class="font-medium mb-1">Jak to działa?</p>
+                <p><strong>URL→URL:</strong> wypełnij pola „Źródłowy URL" i „Docelowy URL".</p>
+                <p class="mt-1"><strong>Product/Category→URL:</strong> podaj ID oraz „Źródłowy URL" (stary adres), a „Docelowy URL" zostanie pobrany automatycznie podczas synchronizacji.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="md:col-span-2" data-field="source">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-link mr-2 text-gray-500"></i>Źródłowy URL (stary adres)
+          </label>
+          {{ form.source_url }}
+          {% if form.source_url.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.source_url.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <p class="text-xs text-gray-500 mt-1">Np. /stara-strona lub /promocja-2024</p>
+          {% if form.source_url.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.source_url.help_text }}</p>
+          {% endif %}
+        </div>
+        
+        <div data-field="product">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-box mr-2 text-gray-500"></i>Product ID
+          </label>
+          {{ form.product_id }}
+          {% if form.product_id.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.product_id.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <p class="text-xs text-gray-500 mt-1">ID produktu w Shopera</p>
+          {% if form.product_id.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.product_id.help_text }}</p>
+          {% endif %}
+        </div>
+        
+        <div data-field="category">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-folder mr-2 text-gray-500"></i>Category ID
+          </label>
+          {{ form.category_id }}
+          {% if form.category_id.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.category_id.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <p class="text-xs text-gray-500 mt-1">ID kategorii w Shopera</p>
+          {% if form.category_id.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.category_id.help_text }}</p>
+          {% endif %}
+        </div>
+        
+        <div class="md:col-span-2 transition-opacity" data-field="target">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-external-link-alt mr-2 text-gray-500"></i>Docelowy URL <span class="text-xs font-normal text-gray-500" data-target-hint></span>
+          </label>
+          {{ form.target_url }}
+          {% if form.target_url.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.target_url.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <p class="text-xs text-gray-500 mt-1">Np. /nowa-strona lub /kategoria/produkt</p>
+          {% if form.target_url.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.target_url.help_text }}</p>
+          {% endif %}
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            <i class="fas fa-code mr-2 text-gray-500"></i>Kod HTTP
+          </label>
           {{ form.status_code }}
+          {% if form.status_code.errors %}
+          <ul class="mt-2 text-sm text-red-400 space-y-1" role="alert">
+            {% for error in form.status_code.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if form.status_code.help_text %}
+          <p class="text-xs text-gray-500 mt-1">{{ form.status_code.help_text }}</p>
+          {% endif %}
         </div>
       </div>
-      <div class="card-actions justify-end">
-        <a class="btn" href="{% url 'seo_redirects:list' %}">Anuluj</a>
-        <button class="btn btn-primary" type="submit">Zapisz</button>
+      
+      <div class="flex gap-3 justify-end pt-4 border-t border-gray-700/50">
+        <a class="bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2" href="{% url 'seo_redirects:list' %}">
+          <i class="fas fa-times"></i>
+          Anuluj
+        </a>
+        <button id="submit-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2" type="submit">
+          <i id="submit-icon" class="fas fa-check"></i>
+          <span id="submit-text">Zapisz przekierowanie</span>
+        </button>
       </div>
     </form>
     <script>
       (function() {
+        const form = document.querySelector('[data-redirect-form]');
+        if (!form) {
+          return;
+        }
+
+        const submitButton = document.getElementById('submit-btn');
+        const submitIcon = document.getElementById('submit-icon');
+        const submitText = document.getElementById('submit-text');
+        let isSubmitting = false;
+
+        // Prevent double submission
+        form.addEventListener('submit', function(e) {
+          if (isSubmitting) {
+            e.preventDefault();
+            return false;
+          }
+          
+          isSubmitting = true;
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.classList.remove('hover:bg-blue-700');
+            submitButton.classList.add('opacity-75', 'cursor-not-allowed', 'bg-blue-700');
+          }
+          
+          // Change button text and icon with animation
+          if (submitIcon) {
+            submitIcon.className = 'fas fa-spinner fa-spin';
+          }
+          if (submitText) {
+            submitText.textContent = 'Zapisywanie...';
+          }
+        });
+
         const typeSelect = document.getElementById('id_rule_type');
         if (!typeSelect) {
           return;

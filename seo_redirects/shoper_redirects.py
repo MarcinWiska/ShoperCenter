@@ -278,6 +278,133 @@ def _norm_path(url_like: Optional[str]) -> str:
     return s
 
 
+def _collect_delete_endpoints(root: str) -> List[str]:
+    lowered_root = root.lower()
+    endpoints = ['redirects']
+    if 'rest' in lowered_root:
+        endpoints.append('seo/redirects')
+    else:
+        if '/webapi/api/' not in lowered_root:
+            endpoints.append('seo/redirects')
+    return endpoints
+
+
+def delete_redirect(
+    base_url: str,
+    token: str,
+    *,
+    remote_id: Optional[str] = None,
+    source_url: Optional[str] = None,
+    target_url: Optional[str] = None,
+    target_type: Optional[int] = None,
+    target_object_id: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """Remove redirect from Shoper. Tries by remote id first, falls back to lookup by source/target."""
+    print(f"\n>>>> delete_redirect API call: base_url={base_url}, remote_id={remote_id}, source={source_url}")
+
+    def attempt_delete(rid: str) -> Tuple[bool, str]:
+        print(f"\n>>>>> attempt_delete with rid={rid}")
+        last_error = 'Brak odpowiedzi z API podczas usuwania.'
+
+        for root in build_rest_roots(base_url):
+            for endpoint in _collect_delete_endpoints(root):
+                base_path = endpoint.rstrip('/')
+                candidate_urls = [
+                    urljoin(root, f"{base_path}/{rid}"),
+                    urljoin(root, f"{base_path}/{rid}/"),
+                ]
+
+                for url in candidate_urls:
+                    print(f">>>>>> Trying DELETE {url}")
+                    try:
+                        resp = requests.delete(url, headers=auth_headers(token), timeout=12)
+                    except requests.exceptions.Timeout:
+                        last_error = 'Przekroczono czas oczekiwania na usunięcie.'
+                        continue
+                    except requests.exceptions.ConnectionError:
+                        last_error = 'Błąd połączenia z API podczas usuwania.'
+                        continue
+                    except Exception as exc:  # pragma: no cover - defensive
+                        last_error = f'Nieoczekiwany błąd: {exc}'
+                        continue
+
+                    if resp.status_code in (200, 202, 204):
+                        return True, f'Usunięto przekierowanie (HTTP {resp.status_code}).'
+                    if resp.status_code == 404:
+                        return True, 'Przekierowanie nie istnieje w Shoper – traktuję jako usunięte.'
+
+                    snippet = (resp.text or '')[:500]
+                    last_error = f'HTTP {resp.status_code}: {snippet or "Brak treści"} @ {url}'
+
+                # Fallback: some instalations expect POST /redirects/delete with payload
+                delete_urls = [
+                    urljoin(root, f"{base_path}/delete"),
+                    urljoin(root, f"{base_path}/delete/"),
+                ]
+                payloads = [
+                    {'redirect_id': rid},
+                    {'id': rid},
+                ]
+
+                for url in delete_urls:
+                    for body in payloads:
+                        try:
+                            resp = requests.post(url, headers=auth_headers(token), json=body, timeout=12)
+                        except requests.exceptions.Timeout:
+                            last_error = 'Przekroczono czas oczekiwania na usunięcie.'
+                            continue
+                        except requests.exceptions.ConnectionError:
+                            last_error = 'Błąd połączenia z API podczas usuwania.'
+                            continue
+                        except Exception as exc:
+                            last_error = f'Nieoczekiwany błąd: {exc}'
+                            continue
+
+                        if resp.status_code in (200, 202, 204):
+                            return True, f'Usunięto przekierowanie (HTTP {resp.status_code}).'
+                        if resp.status_code == 404:
+                            return True, 'Przekierowanie nie istnieje w Shoper – traktuję jako usunięte.'
+
+                        snippet = (resp.text or '')[:500]
+                        last_error = f'HTTP {resp.status_code}: {snippet or "Brak treści"} @ {url}'
+
+        return False, last_error
+
+    rid = (remote_id or '').strip()
+    if rid:
+        ok, msg = attempt_delete(rid)
+        if ok:
+            return True, msg
+
+    norm_source = _norm_path(source_url)
+    norm_target = _norm_path(target_url)
+
+    last_error = 'Nie znaleziono przekierowania w Shoper lub operacja usuwania nie powiodła się.'
+
+    if not rid and norm_source:
+        items = list_redirects(base_url, token, limit=500)
+        for item in items:
+            src, tgt, _, found_id, found_type, found_object = parse_remote_redirect(item)
+            if _norm_path(src) != norm_source:
+                continue
+
+            same_target = True
+            if norm_target:
+                same_target = _norm_path(tgt) == norm_target
+            if same_target and target_type is not None and found_type is not None:
+                same_target = found_type == target_type
+            if same_target and target_object_id is not None and found_object is not None:
+                same_target = int(found_object) == int(target_object_id)
+
+            if same_target and found_id:
+                ok, msg = attempt_delete(str(found_id))
+                if ok:
+                    return True, msg
+                last_error = msg
+
+    return False, last_error
+
+
 def was_redirect_created(
     base_url: str,
     token: str,

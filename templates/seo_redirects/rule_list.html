@@ -17,10 +17,41 @@
         <p class="text-sm text-gray-400 mt-1">301/302 redirects dla optymalizacji SEO</p>
       </div>
     </div>
-    <a class="btn-primary" href="{% url 'seo_redirects:add' %}">
-      <i class="fas fa-plus"></i>
-      Nowe przekierowanie
-    </a>
+    <div class="flex items-center gap-2">
+      <a class="btn btn-sm btn-outline" href="{{ export_all_url }}">
+        <i class="fas fa-file-export mr-2"></i>
+        Eksport CSV
+      </a>
+      <a class="btn btn-sm" href="{{ import_sample_url }}">
+        <i class="fas fa-file-csv mr-2"></i>
+        Przykładowy CSV
+      </a>
+      <a class="btn btn-sm btn-outline" href="{{ import_upload_url }}">
+        <i class="fas fa-file-import mr-2"></i>
+        Import CSV
+      </a>
+      <a class="btn-primary" href="{% url 'seo_redirects:add' %}">
+        <i class="fas fa-plus"></i>
+        Nowe przekierowanie
+      </a>
+    </div>
+  </div>
+
+  <div class="bg-gradient-to-br from-blue-900/20 to-gray-900 rounded-2xl p-6 border border-blue-800/40 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-bold text-white">Import przekierowań z CSV</h2>
+        <p class="text-sm text-gray-400 max-w-2xl">
+          Wgraj plik CSV z przekierowaniami (URL→URL, Product ID→URL, Category ID→URL), sprawdź podgląd i zdecyduj, które rekordy zapisać.
+          Po imporcie możesz automatycznie zsynchronizować je z API Shopera.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="{{ import_upload_url }}"><i class="fas fa-file-import mr-2"></i>Rozpocznij import</a>
+        <a class="btn" href="{{ import_sample_url }}"><i class="fas fa-file-download mr-2"></i>Pobierz przykład</a>
+        <a class="btn btn-outline" href="{{ export_all_url }}"><i class="fas fa-file-export mr-2"></i>Eksportuj wszystko</a>
+      </div>
+    </div>
   </div>
 
   <!-- Table -->
@@ -154,10 +185,16 @@
     
     <div class="flex flex-wrap gap-3">
       {% for s in shops %}
-        <a class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all border border-gray-700 flex items-center gap-2" href="{% url 'seo_redirects:pull' s.id %}">
-          <i class="fas fa-download"></i>
-          {{ s.name }}
-        </a>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <a class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all border border-gray-700 flex items-center gap-2" href="{% url 'seo_redirects:pull' s.id %}">
+            <i class="fas fa-cloud-download-alt"></i>
+            {{ s.name }}
+          </a>
+          <a class="bg-gray-800/60 hover:bg-gray-700 text-gray-200 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all border border-gray-700/60 flex items-center gap-2" href="{{ export_all_url }}?shop={{ s.id }}">
+            <i class="fas fa-file-export"></i>
+            Eksportuj {{ s.name }}
+          </a>
+        </div>
       {% empty %}
         <div class="text-gray-500 text-sm">
           <i class="fas fa-info-circle text-blue-400 mr-2"></i>

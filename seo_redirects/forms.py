@@ -1,4 +1,7 @@
 from django import forms
+
+from shops.models import Shop
+
 from .models import RedirectRule
 from .shoper_redirects import _norm_path
 
@@ -59,3 +62,32 @@ class RedirectRuleForm(forms.ModelForm):
         if target_url:
             cleaned['target_url'] = _norm_path(target_url)
         return cleaned
+
+
+class RedirectImportUploadForm(forms.Form):
+    shop = forms.ModelChoiceField(
+        queryset=Shop.objects.none(),
+        label='Sklep',
+        widget=forms.Select(attrs={'class': 'select select-bordered w-full'}),
+        help_text='Wybierz sklep, do którego zostaną zaimportowane przekierowania.',
+    )
+    csv_file = forms.FileField(
+        label='Plik CSV',
+        help_text='Załaduj plik CSV z przekierowaniami. Obsługiwane kodowanie: UTF-8.',
+        widget=forms.ClearableFileInput(attrs={'class': 'file-input file-input-bordered w-full'}),
+    )
+    sync_immediately = forms.BooleanField(
+        label='Synchronizuj z Shoper po imporcie',
+        required=False,
+        initial=True,
+        help_text='Po imporcie od razu wyślij przekierowania do Shoper API.',
+        widget=forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields['shop'].queryset = Shop.objects.filter(owner=user)
+        else:
+            self.fields['shop'].queryset = Shop.objects.none()
