@@ -2,14 +2,40 @@
 {% load module_extras %}
 {% block title %}Moduł — ShoperCenter{% endblock %}
 {% block content %}
-<div class="flex justify-between items-center mb-4">
-  <div>
-    <h1 class="text-2xl font-semibold">{{ module.name }}</h1>
-    <div class="text-sm opacity-70">{{ module.shop.name }} / {{ module.resource }}</div>
+<div class="mb-6 p-4 rounded-lg shadow-lg bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-700">
+  <div class="flex justify-between items-start">
+    <div>
+      <h1 class="text-3xl font-bold text-white">{{ module.name }}</h1>
+      <div class="text-sm text-gray-400 mt-1">
+        <span class="font-semibold text-gray-300">{{ module.shop.name }}</span> / <span class="badge badge-primary badge-outline">{{ module.resource }}</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a class="btn btn-outline btn-sm" href="{% url 'modules:configure' module.pk %}">
+        <i class="fas fa-cogs mr-2"></i>Atrybuty
+      </a>
+      <a class="btn btn-outline btn-sm" href="{% url 'modules:list' %}">
+        <i class="fas fa-arrow-left mr-2"></i>Wróć
+      </a>
+    </div>
   </div>
-  <div class="space-x-2">
-    <a class="btn" href="{% url 'modules:configure' module.pk %}">Atrybuty</a>
-    <a class="btn" href="{% url 'modules:list' %}">Wróć</a>
+  <div class="mt-4 pt-4 border-t border-gray-700 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+    <div class="p-3 bg-gray-800 rounded-lg">
+      <div class="text-2xl font-bold text-white" id="stats-total-products">...</div>
+      <div class="text-xs text-gray-400">Produktów w module</div>
+    </div>
+    <div class="p-3 bg-gray-800 rounded-lg">
+      <div class="text-2xl font-bold text-green-400" id="stats-total-value">...</div>
+      <div class="text-xs text-gray-400">Wartość magazynu</div>
+    </div>
+    <div class="p-3 bg-gray-800 rounded-lg">
+      <div class="text-2xl font-bold text-blue-400" id="stats-avg-price">...</div>
+      <div class="text-xs text-gray-400">Średnia cena</div>
+    </div>
+    <div class="p-3 bg-gray-800 rounded-lg">
+      <div class="text-2xl font-bold text-yellow-400" id="stats-active-products">...</div>
+      <div class="text-xs text-gray-400">Aktywnych produktów</div>
+    </div>
   </div>
 </div>
 
@@ -18,32 +44,117 @@
     {{ columns|json_script:"module-columns-data" }}
     {{ core_settings_data|json_script:"core-settings-data" }}
     <!-- Spreadsheet-like grid for products -->
-    <div class="mb-3 flex items-center gap-2 flex-wrap">
-      <button id="createProductBtn" class="btn btn-success btn-sm">
-        <i class="fas fa-plus mr-2"></i>
-        Dodaj produkt
-      </button>
-      <button id="bulkSyncBtn" class="btn btn-primary btn-sm">
-        <i class="fas fa-sync mr-2"></i>
-        Zapisz zmiany (<span id="unsavedCount">0</span>)
-      </button>
-      <button id="bulkDeleteBtn" class="btn btn-error btn-sm">
-        <i class="fas fa-trash mr-2"></i>
-        Usuń zaznaczone (<span id="selectedCount">0</span>)
-      </button>
-      <button id="refreshGridBtn" class="btn btn-sm">
-        <i class="fas fa-rotate mr-2"></i>
-        Odśwież
-      </button>
-      <label class="cursor-pointer flex items-center gap-2">
-        <input type="checkbox" id="selectAllCheckbox" class="checkbox checkbox-sm" />
-        <span class="text-xs">Zaznacz wszystkie</span>
-      </label>
-      <span class="text-xs opacity-70">Dwuklik aby edytować komórkę. Kliknij checkbox aby zaznaczyć wiele produktów do usunięcia. Pola readonly są zablokowane.</span>
+    <div class="mb-4 p-4 rounded-xl bg-gray-900 border border-gray-800 shadow-lg product-toolbar">
+      <div class="flex items-center gap-3 flex-wrap mb-3 text-gray-100">
+        <button id="createProductBtn" class="btn btn-success btn-sm gap-2">
+          <i class="fas fa-plus mr-1"></i>
+          Dodaj produkt
+        </button>
+        <div class="divider divider-horizontal mx-1"></div>
+        <button id="bulkSyncBtn" class="btn btn-primary btn-sm gap-2">
+          <i class="fas fa-sync mr-1"></i>
+          Zapisz zmiany
+          <span class="badge badge-sm toolbar-badge ml-2" id="unsavedCount">0</span>
+        </button>
+        <button id="bulkCopyToShopBtn" class="btn btn-info btn-sm gap-2">
+          <i class="fas fa-copy mr-1"></i>
+          Kopiuj do sklepu
+          <span class="badge badge-sm toolbar-badge ml-2" id="copySelectedCount">0</span>
+        </button>
+        <button id="bulkDeleteBtn" class="btn btn-error btn-sm gap-2">
+          <i class="fas fa-trash mr-1"></i>
+          Usuń zaznaczone
+          <span class="badge badge-sm toolbar-badge ml-2" id="selectedCount">0</span>
+        </button>
+        <div class="divider divider-horizontal mx-1"></div>
+        <button id="refreshGridBtn" class="btn btn-ghost btn-sm gap-2">
+          <i class="fas fa-rotate mr-1"></i>
+          Odśwież
+        </button>
+        <label class="cursor-pointer flex items-center gap-2 ml-2 text-gray-200">
+          <input type="checkbox" id="selectAllCheckbox" class="checkbox checkbox-sm checkbox-primary" />
+          <span class="text-sm font-medium">Zaznacz wszystkie</span>
+        </label>
+      </div>
+      <div class="text-xs text-gray-400 flex items-start gap-2">
+        <i class="fas fa-info-circle mt-0.5"></i>
+        <span><strong>Wskazówki:</strong> Dwuklik na komórkę aby edytować • Zaznacz produkty checkboxem • Pola readonly są zablokowane</span>
+      </div>
     </div>
 
     <!-- Tabulator container -->
     <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+    <style>
+      /* Custom styles for product grid */
+      #productGrid {
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        border-radius: 0.5rem;
+        overflow: hidden;
+      }
+      
+      .tabulator {
+        font-size: 0.875rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      
+      .tabulator .tabulator-header {
+        background-color: rgba(0, 0, 0, 0.3);
+        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+      }
+      
+      .tabulator .tabulator-header .tabulator-col {
+        background-color: transparent;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      
+      .tabulator .tabulator-row {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      
+      .tabulator .tabulator-row:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+      }
+      
+      .tabulator .tabulator-row.tabulator-selected {
+        background-color: rgba(59, 130, 246, 0.15) !important;
+      }
+      
+      .tabulator .tabulator-cell {
+        padding: 8px 10px;
+      }
+      
+      /* Action buttons in grid */
+      #productGrid .btn-xs {
+        height: 24px;
+        min-height: 24px;
+        padding: 0 8px;
+        font-size: 0.75rem;
+      }
+      
+      #productGrid .btn-ghost {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+      
+      #productGrid .btn-ghost:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .product-toolbar {
+        background: linear-gradient(135deg, #0f172a, #111827);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+      }
+
+      .toolbar-badge {
+        background-color: #111827;
+        border: 1px solid #374151;
+        color: #f9fafb;
+        min-width: 1.5rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+    </style>
     <div id="productGrid" class="w-full"></div>
     <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
     <script>
@@ -51,7 +162,6 @@
       const changedMap = new Map();
       let originalSnapshot = new Map(); // item_id -> { key: value }
       let editableKeys = [];
-      let selectedRows = new Set(); // Track selected row IDs
 
       function getChangedCount() {
         let count = 0;
@@ -65,51 +175,83 @@
       }
 
       function updateSelectedUI() {
-        // Get actual selected rows from Tabulator
-        let actualSelectedCount = 0;
-        if (window.__productGrid) {
-          const selectedRowsInGrid = window.__productGrid.getSelectedRows();
-          actualSelectedCount = selectedRowsInGrid.length;
-          
-          // Rebuild selectedRows from actual grid selection
-          selectedRows.clear();
-          selectedRowsInGrid.forEach(row => {
-            const id = row.getData().item_id;
-            if (id) selectedRows.add(id);
-          });
+        if (!window.__productGrid) {
+          console.warn('Grid not initialized yet');
+          return;
         }
+
+        const selectedRowsInGrid = window.__productGrid.getSelectedRows();
+        const c = selectedRowsInGrid.length;
         
-        const c = selectedRows.size || actualSelectedCount;
+        console.log('updateSelectedUI called, selected rows:', c);
+
         document.getElementById('selectedCount').textContent = c;
+        document.getElementById('copySelectedCount').textContent = c;
         
         const deleteBtn = document.getElementById('bulkDeleteBtn');
+        const copyBtn = document.getElementById('bulkCopyToShopBtn');
         const selectAllCheckbox = document.getElementById('selectAllCheckbox');
         
-        // Visual feedback - change opacity but keep button clickable
         if (c > 0) {
           deleteBtn.style.opacity = '1';
           deleteBtn.classList.add('btn-error');
+          copyBtn.style.opacity = '1';
+          copyBtn.classList.add('btn-info');
         } else {
           deleteBtn.style.opacity = '0.5';
           deleteBtn.classList.remove('btn-error');
+          copyBtn.style.opacity = '0.5';
+          copyBtn.classList.remove('btn-info');
         }
         
-        // Update select all checkbox state
-        if (window.__productGrid) {
-          const allRows = window.__productGrid.getRows();
-          const selectedRowsInGrid = window.__productGrid.getSelectedRows();
-          
-          if (selectedRowsInGrid.length === 0) {
+        const allRows = window.__productGrid.getRows();
+        if (allRows.length > 0) {
+            if (c === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (c === allRows.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        } else {
             selectAllCheckbox.checked = false;
             selectAllCheckbox.indeterminate = false;
-          } else if (selectedRowsInGrid.length === allRows.length && allRows.length > 0) {
-            selectAllCheckbox.checked = true;
-            selectAllCheckbox.indeterminate = false;
-          } else {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = true;
-          }
         }
+      }
+
+      function calculateStats(data) {
+        if (!data || data.length === 0) {
+          document.getElementById('stats-total-products').textContent = '0';
+          document.getElementById('stats-total-value').textContent = '0 zł';
+          document.getElementById('stats-avg-price').textContent = '0 zł';
+          document.getElementById('stats-active-products').textContent = '0';
+          return;
+        }
+
+        const totalProducts = data.length;
+        let totalValue = 0;
+        let activeProducts = 0;
+
+        data.forEach(row => {
+          const price = parseFloat(row['stock.price']) || 0;
+          const stock = parseInt(row['stock.stock'], 10) || 0;
+          totalValue += price * stock;
+
+          const isActive = row['translations.pl_PL.active'];
+          if (isActive === true || isActive === 'true' || isActive === 1) {
+            activeProducts++;
+          }
+        });
+
+        const avgPrice = totalProducts > 0 ? totalValue / totalProducts : 0;
+
+        document.getElementById('stats-total-products').textContent = totalProducts;
+        document.getElementById('stats-total-value').textContent = `${totalValue.toFixed(2)} zł`;
+        document.getElementById('stats-avg-price').textContent = `${avgPrice.toFixed(2)} zł`;
+        document.getElementById('stats-active-products').textContent = activeProducts;
       }
 
       async function loadGridData() {
@@ -117,6 +259,8 @@
         const resp = await fetch(`/modules/{{ module.pk }}/data.json?limit=0`, { headers: { 'Accept': 'application/json' } });
         const data = await resp.json();
         if (!data.ok) throw new Error(data.error || 'Błąd pobierania danych');
+
+        calculateStats(data.rows);
 
         // Build Tabulator columns; use custom nestedFieldSeparator so dotted keys are literal
         window.__gridColumnsMeta = data.columns || [];
@@ -131,8 +275,14 @@
             headerSort: false, 
             width: 50,
             cellClick: function(e, cell) {
-              // Stop propagation to prevent row click from interfering
+              // Ensure checkbox toggles Tabulator selection and toolbar counters instantly
+              e.preventDefault();
               e.stopPropagation();
+              const row = cell.getRow();
+              if (row) {
+                row.toggleSelect();
+                updateSelectedUI();
+              }
             }
           }
         ];
@@ -155,16 +305,35 @@
 
         // Actions column
         cols.push({
-          title: 'Akcje', field: '__actions', width: 380, minWidth: 320, headerSort: false, hozAlign: 'left', formatter: (cell) => {
+          title: 'Akcje', field: '__actions', width: 280, minWidth: 260, headerSort: false, hozAlign: 'center', formatter: (cell) => {
             const d = cell.getRow().getData();
             const id = d.item_id;
             if (!id) return '<span class="opacity-50 text-xs">Brak ID</span>';
             return `
-              <button class="btn btn-xs mr-1" onclick="openProductEditModal({{ module.pk }}, ${id})">Edytuj</button>
-              <button class="btn btn-xs mr-1" onclick="openProductRedirectModal({{ module.pk }}, ${id})">Przekierowanie</button>
-              <button class="btn btn-xs mr-1" onclick="openProductPromoModal({{ module.pk }}, ${id})">Promocja</button>
-              <button class="btn btn-xs mr-1" onclick="openProductDuplicateModal({{ module.pk }}, ${id})">Duplikuj</button>
-              <button class="btn btn-error btn-xs" onclick="deleteProduct({{ module.pk }}, ${id})">Usuń</button>
+              <div class="flex flex-col gap-1" style="min-width: 240px;">
+                <div class="flex gap-1 justify-center">
+                  <button class="btn btn-xs btn-ghost" onclick="openProductEditModal({{ module.pk }}, ${id})" title="Edytuj produkt">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="btn btn-xs btn-ghost" onclick="openProductRedirectModal({{ module.pk }}, ${id})" title="Przekierowanie">
+                    <i class="fas fa-directions"></i>
+                  </button>
+                  <button class="btn btn-xs btn-ghost" onclick="openProductPromoModal({{ module.pk }}, ${id})" title="Promocja">
+                    <i class="fas fa-percentage"></i>
+                  </button>
+                  <button class="btn btn-xs btn-ghost" onclick="openProductDuplicateModal({{ module.pk }}, ${id})" title="Duplikuj">
+                    <i class="fas fa-clone"></i>
+                  </button>
+                </div>
+                <div class="flex gap-1 justify-center">
+                  <button class="btn btn-xs btn-info" onclick="openCopyToShopModal({{ module.pk }}, [${id}])" title="Kopiuj do innego sklepu">
+                    <i class="fas fa-copy mr-1"></i>Kopiuj
+                  </button>
+                  <button class="btn btn-xs btn-error" onclick="deleteProduct({{ module.pk }}, ${id})" title="Usuń produkt">
+                    <i class="fas fa-trash mr-1"></i>Usuń
+                  </button>
+                </div>
+              </div>
             `;
           }
         });
@@ -173,45 +342,32 @@
         const grid = new Tabulator('#productGrid', {
           data: data.rows || [],
           columns: cols,
-          layout: 'fitData',
+          layout: 'fitDataStretch',
           height: '70vh',
           reactiveData: false,
           persistenceMode: true,
           nestedFieldSeparator: '~~', // treat dotted keys as literal
           clipboard: true,
-          columnDefaults: { tooltip: true },
+          columnDefaults: { 
+            tooltip: true,
+            headerSort: true,
+            resizable: true
+          },
           selectable: true,  // Allow multiple row selection
+          rowHeight: 60,  // Increase row height for 2-row action buttons
           selectableCheck: function(row) {
             return true; // All rows are selectable
           },
           rowSelected: function(row){
-            const id = row.getData().item_id;
-            console.log('Row selected:', id);
-            if (id) {
-              selectedRows.add(id);
-              console.log('Selected rows:', Array.from(selectedRows));
-              updateSelectedUI();
-            }
+            console.log('rowSelected event fired');
+            updateSelectedUI();
           },
           rowDeselected: function(row){
-            const id = row.getData().item_id;
-            console.log('Row deselected:', id);
-            if (id) {
-              selectedRows.delete(id);
-              console.log('Selected rows:', Array.from(selectedRows));
-              updateSelectedUI();
-            }
+            console.log('rowDeselected event fired');
+            updateSelectedUI();
           },
           rowSelectionChanged: function(data, rows){
-            // This is called whenever selection changes
-            console.log('Selection changed, selected rows count:', rows.length);
-            // Rebuild selectedRows set from actual selected rows
-            selectedRows.clear();
-            rows.forEach(row => {
-              const id = row.getData().item_id;
-              if (id) selectedRows.add(id);
-            });
-            console.log('Updated selectedRows:', Array.from(selectedRows));
+            console.log('rowSelectionChanged event fired, rows:', rows.length);
             updateSelectedUI();
           },
           cellEdited: function(cell){
@@ -259,14 +415,15 @@
         } else {
           window.__productGrid.deselectRow();
         }
+        // Fallback refresh for selection counters in case Tabulator batches events
+        setTimeout(updateSelectedUI, 0);
       });
 
       document.getElementById('refreshGridBtn').addEventListener('click', async () => {
         try {
           changedMap.clear();
-          selectedRows.clear();
           updateUnsavedUI();
-          updateSelectedUI();
+          // updateSelectedUI is called inside loadGridData via rowSelectionChanged
           document.getElementById('selectAllCheckbox').checked = false;
           await loadGridData();
         } catch (e) {
@@ -353,18 +510,29 @@
         }
       }
 
-      // Bulk delete selected products
-      document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
-        // Get actual selected rows from grid
-        let ids = [];
+      // Bulk copy to shop
+      document.getElementById('bulkCopyToShopBtn').addEventListener('click', async () => {
         if (window.__productGrid) {
           const selectedRowsInGrid = window.__productGrid.getSelectedRows();
           ids = selectedRowsInGrid.map(row => row.getData().item_id).filter(id => id);
         }
         
-        // Fallback to tracked selectedRows if grid selection is empty
+        console.log('Attempting to copy IDs:', ids);
+        
         if (ids.length === 0) {
-          ids = Array.from(selectedRows);
+          alert('Nie zaznaczono żadnych produktów do skopiowania. Zaznacz produkty klikając w checkboxy.');
+          return;
+        }
+        
+        // Open copy to shop modal
+        openCopyToShopModal({{ module.pk }}, ids);
+      });
+
+      // Bulk delete selected products
+      document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
+        if (window.__productGrid) {
+          const selectedRowsInGrid = window.__productGrid.getSelectedRows();
+          ids = selectedRowsInGrid.map(row => row.getData().item_id).filter(id => id);
         }
         
         console.log('Attempting to delete IDs:', ids);
@@ -389,7 +557,6 @@
           if (!data.ok) throw new Error(data.error || 'Błąd masowego usuwania');
           const msg = `Usunięto: ${data.deleted}, błędów: ${data.failed}`;
           alert(msg);
-          selectedRows.clear();
           if (window.__productGrid) {
             window.__productGrid.deselectRow();
           }
@@ -406,7 +573,10 @@
         try { 
           await loadGridData();
           updateSelectedUI(); // Initialize button state
-        } catch (e) { alert(e.message || 'Błąd ładowania'); }
+        } catch (e) { 
+          alert(e.message || 'Błąd ładowania'); 
+          calculateStats([]); // Clear stats on error
+        }
       })();
     </script>
   {% else %}
@@ -999,43 +1169,6 @@
     function getCookie(name) {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop().split(';').shift();
-    }
-
-    async function openProductEditModal(modulePk, itemId) {
-      pemState = { modulePk, itemId, editable: [] };
-      document.getElementById('pem-id').textContent = `#${itemId}`;
-      const alertBox = document.getElementById('pem-alert');
-      alertBox.className = 'hidden alert mb-3';
-      alertBox.textContent = '';
-      document.getElementById('pem-fields').innerHTML = '<div class="opacity-60">Ładowanie…</div>';
-      document.getElementById('product-edit-modal').checked = true;
-      try {
-        const resp = await fetch(`/modules/${modulePk}/products/${itemId}/edit.json`, { headers: { 'Accept': 'application/json' } });
-        const data = await resp.json();
-        if (!data.ok) throw new Error(data.error || 'Błąd pobierania danych');
-        pemState.editable = data.editable || [];
-        renderPemFields();
-      } catch (e) {
-        showPemError(e.message || 'Błąd ładowania.');
-      }
-    }
-
-    function renderPemFields() {
-      const wrap = document.getElementById('pem-fields');
-      wrap.innerHTML = '';
-      
-      let editableCount = 0;
-      let readonlyCount = 0;
-      
-      pemState.editable.forEach(f => {
-        if (f.editable !== false) editableCount++;
-        else readonlyCount++;
-        
-        const div = document.createElement('div');
-        div.className = 'form-control';
-        const label = document.createElement('label');
-        label.className = 'label';
         
         let editabilityBadge = '';
         if (f.editable === false) {
@@ -1571,6 +1704,313 @@
       return false;
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDuplicateModal(); });
+  </script>
+{% endif %}
+{% if module.resource == 'products' %}
+  <!-- Copy to shop modal -->
+  <input type="checkbox" id="copy-to-shop-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box max-w-2xl relative bg-gray-900 border border-gray-800">
+      <label for="copy-to-shop-modal" class="btn btn-sm btn-circle absolute right-2 top-2 bg-gray-800 border-gray-700 hover:bg-red-600 hover:border-red-600" aria-label="Zamknij">✕</label>
+      <h3 class="font-bold text-lg mb-2 text-white">Kopiuj produkty do innego sklepu</h3>
+      <div id="cts-alert" class="hidden alert mb-3"></div>
+      
+      <div class="mb-4">
+        <h4 class="text-sm font-semibold text-gray-200 mb-2">Produkty do skopiowania (<span id="cts-count">0</span>):</h4>
+        <div id="cts-products-list" class="bg-base-200 p-3 rounded max-h-60 overflow-y-auto">
+          <div class="text-gray-400 text-sm">Ładowanie...</div>
+        </div>
+      </div>
+      
+      <div class="form-control mb-4">
+        <label class="label"><span class="label-text text-gray-300">Wybierz sklep docelowy</span></label>
+        <select id="cts-target-shop" class="select select-bordered w-full">
+          <option value="">-- wybierz sklep --</option>
+        </select>
+        <div class="text-xs text-gray-400 mt-1">
+          <i class="fas fa-info-circle mr-1"></i>
+          Produkty zostaną <strong>skopiowane</strong> do wybranego sklepu. Oryginalne produkty pozostaną w źródłowym sklepie bez zmian.
+        </div>
+      </div>
+      
+      <div class="modal-action">
+        <label for="copy-to-shop-modal" class="btn">Anuluj</label>
+        <button id="cts-copy-btn" class="btn btn-primary" onclick="executeCopyToShop()">
+          <i class="fas fa-copy mr-2"></i>
+          Kopiuj produkty
+        </button>
+      </div>
+    </div>
+    <label class="modal-backdrop" for="copy-to-shop-modal">Zamknij</label>
+  </div>
+
+  <script>
+    let ctsState = {
+      modulePk: null,
+      productIds: [],
+      productNames: [],
+      availableShops: []
+    };
+
+    function closeCopyToShopModal() {
+      const cb = document.getElementById('copy-to-shop-modal');
+      if (cb) cb.checked = false;
+    }
+
+    function showCtsError(msg) {
+      const el = document.getElementById('cts-alert');
+      el.className = 'alert alert-error mb-3';
+      el.innerHTML = `<i class="fas fa-exclamation-triangle mr-2"></i>${msg}`;
+    }
+
+    function showCtsSuccess(msg) {
+      const el = document.getElementById('cts-alert');
+      el.className = 'alert alert-success mb-3';
+      el.innerHTML = `<i class="fas fa-check-circle mr-2"></i>${msg}`;
+    }
+
+    function showCtsInfo(msg) {
+      const el = document.getElementById('cts-alert');
+      el.className = 'alert alert-info mb-3';
+      el.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${msg}`;
+    }
+
+    function clearCtsAlert() {
+      const el = document.getElementById('cts-alert');
+      el.className = 'hidden alert mb-3';
+      el.textContent = '';
+    }
+
+    async function openCopyToShopModal(modulePk, productIds) {
+      console.log('openCopyToShopModal called:', { modulePk, productIds });
+      
+      ctsState.modulePk = modulePk;
+      ctsState.productIds = productIds || [];
+      ctsState.productNames = [];
+      ctsState.availableShops = [];
+      
+      clearCtsAlert();
+      
+      if (!ctsState.productIds || ctsState.productIds.length === 0) {
+        showCtsError('Nie wybrano żadnych produktów do skopiowania.');
+        return;
+      }
+      
+      console.log('Opening modal for', ctsState.productIds.length, 'products');
+      
+      // Open modal
+      const checkbox = document.getElementById('copy-to-shop-modal');
+      if (checkbox) checkbox.checked = true;
+      
+      // Update count
+      document.getElementById('cts-count').textContent = ctsState.productIds.length;
+      
+      // Show loading state
+      document.getElementById('cts-products-list').innerHTML = '<div class="text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Ładowanie danych produktów...</div>';
+      document.getElementById('cts-target-shop').innerHTML = '<option value="">-- ładowanie sklepów... --</option>';
+      document.getElementById('cts-target-shop').disabled = true;
+      
+      // Fetch product names from grid
+      try {
+        if (window.__productGrid) {
+          const allData = window.__productGrid.getData();
+          ctsState.productNames = [];
+          
+          ctsState.productIds.forEach(productId => {
+            const row = allData.find(r => r.item_id == productId);
+            if (row) {
+              const name = row['translations.pl_PL.name'] || row['name'] || `Produkt #${productId}`;
+              const code = row['code'] || '';
+              ctsState.productNames.push({ id: productId, name: name, code: code });
+              console.log('Found product:', { id: productId, name: name, code: code });
+            } else {
+              ctsState.productNames.push({ id: productId, name: `Produkt #${productId}`, code: '' });
+              console.log('Product not found in grid:', productId);
+            }
+          });
+        }
+        
+        // Render product list
+        const listHtml = ctsState.productNames.map((p, idx) => {
+          const displayName = p.code ? `${p.name} (${p.code})` : p.name;
+          return `<div class="text-sm py-1 flex items-center">
+            <span class="badge badge-sm badge-primary mr-2">${idx + 1}</span>
+            <span class="text-gray-200">${displayName}</span>
+            <span class="text-gray-500 text-xs ml-2">#${p.id}</span>
+          </div>`;
+        }).join('');
+        
+        document.getElementById('cts-products-list').innerHTML = listHtml || '<div class="text-gray-400 text-sm">Nie znaleziono produktów</div>';
+        
+        console.log('Product list rendered with', ctsState.productNames.length, 'items');
+        
+      } catch (e) {
+        console.error('Error fetching product names:', e);
+        document.getElementById('cts-products-list').innerHTML = '<div class="text-yellow-400 text-sm"><i class="fas fa-exclamation-triangle mr-2"></i>Nie udało się pobrać nazw produktów</div>';
+      }
+      
+      // Fetch available shops
+      try {
+        console.log('Fetching available shops from:', `/modules/${modulePk}/products/copy_to_shop.json`);
+        
+        const resp = await fetch(`/modules/${modulePk}/products/copy_to_shop.json`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        console.log('Shops response status:', resp.status);
+        
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          console.error('Failed to fetch shops:', errorText);
+          throw new Error(`HTTP ${resp.status}: ${errorText}`);
+        }
+        
+        const data = await resp.json();
+        console.log('Shops data received:', data);
+        
+        if (!data.ok) {
+          throw new Error(data.error || 'Błąd pobierania listy sklepów');
+        }
+        
+        ctsState.availableShops = data.shops || [];
+        console.log('Available shops:', ctsState.availableShops);
+        
+        // Populate shop dropdown
+        const select = document.getElementById('cts-target-shop');
+        select.innerHTML = '<option value="">-- wybierz sklep --</option>';
+        
+        if (ctsState.availableShops.length === 0) {
+          select.innerHTML += '<option value="" disabled>Brak dostępnych sklepów</option>';
+          showCtsInfo('Nie masz innych sklepów do których można skopiować produkty. Dodaj nowy sklep w ustawieniach.');
+        } else {
+          ctsState.availableShops.forEach(shop => {
+            const option = document.createElement('option');
+            option.value = shop.id;
+            option.textContent = shop.name;
+            select.appendChild(option);
+          });
+          console.log('Populated dropdown with', ctsState.availableShops.length, 'shops');
+        }
+        
+        select.disabled = ctsState.availableShops.length === 0;
+        
+      } catch (e) {
+        console.error('Error fetching shops:', e);
+        showCtsError(`Błąd pobierania listy sklepów: ${e.message}`);
+        document.getElementById('cts-target-shop').innerHTML = '<option value="">-- błąd ładowania --</option>';
+        document.getElementById('cts-target-shop').disabled = true;
+      }
+    }
+
+    async function executeCopyToShop() {
+      console.log('executeCopyToShop called');
+      clearCtsAlert();
+      
+      const targetShopId = document.getElementById('cts-target-shop').value;
+      console.log('Target shop ID:', targetShopId);
+      
+      if (!targetShopId) {
+        showCtsError('Wybierz sklep docelowy.');
+        return;
+      }
+      
+      if (!ctsState.productIds || ctsState.productIds.length === 0) {
+        showCtsError('Brak produktów do skopiowania.');
+        return;
+      }
+      
+      const targetShopName = ctsState.availableShops.find(s => s.id == targetShopId)?.name || 'wybrany sklep';
+      console.log('Target shop name:', targetShopName);
+      
+      // Disable button during operation
+      const copyBtn = document.getElementById('cts-copy-btn');
+      const originalBtnHtml = copyBtn.innerHTML;
+      copyBtn.disabled = true;
+      copyBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Kopiowanie...';
+      
+      showCtsInfo(`Kopiowanie ${ctsState.productIds.length} produktów do sklepu "${targetShopName}"...`);
+      
+      try {
+        console.log('Sending copy request...');
+        
+        const csrftoken = (document.cookie.split('; ').find(r => r.startsWith('csrftoken='))||'').split('=')[1]||'';
+        
+        const resp = await fetch(`/modules/${ctsState.modulePk}/products/copy_to_shop.json`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRFToken': csrftoken
+          },
+          body: JSON.stringify({
+            product_ids: ctsState.productIds,
+            target_shop_id: parseInt(targetShopId)
+          })
+        });
+        
+        console.log('Copy response status:', resp.status);
+        
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          console.error('Copy request failed:', errorText);
+          throw new Error(`HTTP ${resp.status}: ${errorText}`);
+        }
+        
+        const data = await resp.json();
+        console.log('Copy response data:', data);
+        
+        if (!data.ok) {
+          throw new Error(data.error || 'Błąd kopiowania produktów');
+        }
+        
+        // Show detailed results
+        const successMsg = `
+          <div class="font-semibold mb-2">Operacja zakończona!</div>
+          <div>✓ Skopiowano: <strong>${data.copied}</strong> produktów</div>
+          ${data.failed > 0 ? `<div class="text-warning">⚠ Błędów: <strong>${data.failed}</strong></div>` : ''}
+          <div class="text-sm mt-2">Sklep docelowy: <strong>${data.target_shop_name}</strong></div>
+        `;
+        
+        showCtsSuccess(successMsg);
+        console.log('Copy operation completed:', { copied: data.copied, failed: data.failed });
+        
+        // Log detailed results
+        if (data.results && data.results.length > 0) {
+          console.log('Detailed results:');
+          data.results.forEach((result, idx) => {
+            if (result.ok) {
+              console.log(`  [${idx + 1}] ✓ ${result.product_name || 'Product'} (${result.source_product_id} -> ${result.new_product_id})`);
+            } else {
+              console.error(`  [${idx + 1}] ✗ ${result.product_name || result.product_id}: ${result.error}`);
+            }
+          });
+        }
+        
+        // Close modal after short delay
+        setTimeout(() => {
+          closeCopyToShopModal();
+          // Optionally refresh the grid (commented out to avoid confusion about source products)
+          // document.getElementById('refreshGridBtn')?.click();
+        }, 3000);
+        
+      } catch (e) {
+        console.error('Copy operation error:', e);
+        showCtsError(`Błąd podczas kopiowania: ${e.message}`);
+      } finally {
+        // Re-enable button
+        copyBtn.disabled = false;
+        copyBtn.innerHTML = originalBtnHtml;
+      }
+    }
+
+    // Escape key closes modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeCopyToShopModal();
+    });
+
+    // Expose for toolbar button
+    window.openCopyToShopModal = openCopyToShopModal;
   </script>
 {% endif %}
 {% endblock %}

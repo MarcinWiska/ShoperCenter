@@ -1380,3 +1380,325 @@ def products_bulk_delete_json(request: HttpRequest, pk: int):
     
     logger.info(f"Bulk delete completed: deleted={deleted}, failed={failed}")
     return JsonResponse({'ok': True, 'deleted': deleted, 'failed': failed, 'results': results})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def products_copy_to_shop_json(request: HttpRequest, pk: int):
+    """Copy products from source module to a target shop.
+    - GET: returns list of available target shops (excluding source shop)
+    - POST: expects {product_ids: [int, ...], target_shop_id: int}
+    Copies all possible field values from source products and creates them in target shop.
+    IMPORTANT: Does NOT delete products from source shop.
+    """
+    logger.info(f"=== products_copy_to_shop_json called: method={request.method}, module_pk={pk}, user={request.user.username} ===")
+    
+    source_module = get_object_or_404(Module, pk=pk, owner=request.user)
+    logger.info(f"Source module: {source_module.name} (ID: {source_module.pk}), Shop: {source_module.shop.name} (ID: {source_module.shop.pk})")
+    
+    if source_module.resource != Module.Resource.PRODUCTS:
+        logger.warning(f"Module {pk} is not a products module: {source_module.resource}")
+        return JsonResponse({'ok': False, 'error': 'Dostępne tylko dla modułu produktów.'}, status=400)
+    
+    if request.method == 'GET':
+        # Return list of shops excluding the source shop
+        from shops.models import Shop
+        shops = Shop.objects.filter(owner=request.user).exclude(pk=source_module.shop.pk).order_by('name')
+        shops_data = [{'id': s.pk, 'name': s.name} for s in shops]
+        logger.info(f"GET: Returning {len(shops_data)} available target shops")
+        return JsonResponse({'ok': True, 'shops': shops_data})
+    
+    # POST: perform copy
+    try:
+        payload = json.loads(request.body.decode('utf-8')) if request.body else {}
+        logger.info(f"POST payload received: {payload}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON payload.'}, status=400)
+    
+    product_ids = payload.get('product_ids') or []
+    target_shop_id = payload.get('target_shop_id')
+    
+    logger.info(f"Copy request: product_ids={product_ids}, target_shop_id={target_shop_id}")
+    
+    if not isinstance(product_ids, list) or not product_ids:
+        logger.warning("No product IDs provided")
+        return JsonResponse({'ok': False, 'error': 'Nie wybrano produktów do skopiowania.'}, status=400)
+    
+    if not target_shop_id:
+        logger.warning("No target shop ID provided")
+        return JsonResponse({'ok': False, 'error': 'Nie wybrano sklepu docelowego.'}, status=400)
+    
+    try:
+        target_shop_id = int(target_shop_id)
+    except (TypeError, ValueError) as e:
+        logger.error(f"Invalid target_shop_id: {target_shop_id}, error: {e}")
+        return JsonResponse({'ok': False, 'error': 'Nieprawidłowe ID sklepu docelowego.'}, status=400)
+    
+    # Verify target shop exists and belongs to user
+    from shops.models import Shop
+    try:
+        target_shop = Shop.objects.get(pk=target_shop_id, owner=request.user)
+        logger.info(f"Target shop verified: {target_shop.name} (ID: {target_shop.pk})")
+    except Shop.DoesNotExist:
+        logger.error(f"Target shop {target_shop_id} not found or doesn't belong to user {request.user.username}")
+        return JsonResponse({'ok': False, 'error': 'Sklep docelowy nie istnieje lub nie należy do Ciebie.'}, status=404)
+    
+    # Prevent copying to the same shop
+    if target_shop.pk == source_module.shop.pk:
+        logger.warning(f"Attempt to copy products to the same shop: {target_shop.pk}")
+        return JsonResponse({'ok': False, 'error': 'Nie można kopiować produktów do tego samego sklepu.'}, status=400)
+    
+    # Get source API path
+    api_path = resolve_path(source_module.resource, source_module.api_path_override) or 'products'
+    logger.info(f"Using API path: {api_path}")
+    
+    # Fields to copy - use all editable fields from product structure
+    copyable_fields = [
+        'type', 'category_id', 'code', 'pkwiu', 'producer_id', 'group_id', 
+        'tax_id', 'unit_id', 'currency_id', 'ean', 'producer_code', 'weight',
+        'bestseller', 'newproduct', 'in_loyalty', 'vol_weight', 'promo_delivery_name',
+        'loyalty_score', 'loyalty_price', 'external_id'
+    ]
+    
+    # Stock fields to copy
+    stock_copyable_fields = [
+        'price', 'active', 'default', 'availability_id', 'delivery_id', 
+        'gfx_id', 'stock', 'warn_level', 'sold', 'code', 'ean', 'weight',
+        'weight_type', 'default', 'package', 'price_wholesale', 'price_special',
+        'priceretail', 'price_special_gross'
+    ]
+    
+    # Translation fields to copy (for pl_PL)
+    translation_copyable_fields = [
+        'name', 'short_description', 'description', 'active', 'main_page',
+        'producer_description', 'seo_title', 'seo_description', 'seo_keywords',
+        'page_title', 'other_description', 'description_fv'
+    ]
+    
+    copied = 0
+    failed = 0
+    results: List[Dict[str, Any]] = []
+    
+    logger.info(f"Starting to copy {len(product_ids)} products from shop {source_module.shop.name} to {target_shop.name}")
+    
+    for idx, product_id in enumerate(product_ids, 1):
+        try:
+            product_id = int(product_id)
+        except Exception as e:
+            logger.error(f"[{idx}/{len(product_ids)}] Invalid product_id: {product_id}, error: {e}")
+            failed += 1
+            results.append({'product_id': product_id, 'ok': False, 'error': 'Nieprawidłowe ID produktu.'})
+            continue
+        
+        logger.info(f"[{idx}/{len(product_ids)}] === Processing product ID: {product_id} ===")
+        
+        # Fetch full product from source shop
+        try:
+            logger.info(f"[{idx}/{len(product_ids)}] Fetching product {product_id} from source shop...")
+            source_product = fetch_item(
+                source_module.shop.base_url, 
+                source_module.shop.bearer_token, 
+                api_path, 
+                product_id
+            )
+            
+            if not source_product:
+                logger.error(f"[{idx}/{len(product_ids)}] Failed to fetch product {product_id} from source API")
+                failed += 1
+                results.append({
+                    'product_id': product_id, 
+                    'ok': False, 
+                    'error': 'Nie udało się pobrać produktu ze źródłowego sklepu.'
+                })
+                continue
+            
+            logger.info(f"[{idx}/{len(product_ids)}] Successfully fetched product {product_id}")
+            logger.info(f"[{idx}/{len(product_ids)}] Product keys: {list(source_product.keys())}")
+            
+            # Extract product name for logging
+            product_name = dot_get(source_product, 'translations.pl_PL.name') or 'Bez nazwy'
+            logger.info(f"[{idx}/{len(product_ids)}] Product name: {product_name}")
+            
+        except Exception as e:
+            logger.exception(f"[{idx}/{len(product_ids)}] Exception while fetching product {product_id}: {e}")
+            failed += 1
+            results.append({
+                'product_id': product_id, 
+                'ok': False, 
+                'error': f'Błąd pobierania produktu: {str(e)}'
+            })
+            continue
+        
+        # Build payload for target shop
+        logger.info(f"[{idx}/{len(product_ids)}] Building payload for target shop...")
+        new_product_payload: Dict[str, Any] = {}
+        
+        # Copy base product fields
+        for field in copyable_fields:
+            value = dot_get(source_product, field)
+            if value is not None:
+                new_product_payload[field] = value
+                logger.info(f"[{idx}/{len(product_ids)}] Copied field '{field}': {value}")
+        
+        # Copy stock fields
+        logger.info(f"[{idx}/{len(product_ids)}] Copying stock fields...")
+        source_stock = dot_get(source_product, 'stock')
+        if isinstance(source_stock, dict):
+            new_stock = {}
+            for field in stock_copyable_fields:
+                value = source_stock.get(field)
+                if value is not None:
+                    new_stock[field] = value
+                    logger.info(f"[{idx}/{len(product_ids)}] Copied stock.{field}: {value}")
+            
+            # Ensure required stock fields
+            if 'price' not in new_stock or not new_stock['price']:
+                logger.warning(f"[{idx}/{len(product_ids)}] Missing stock price, using 0.01 as fallback")
+                new_stock['price'] = 0.01
+            if 'active' not in new_stock:
+                new_stock['active'] = True
+            if 'default' not in new_stock:
+                new_stock['default'] = True
+            
+            new_product_payload['stock'] = new_stock
+            logger.info(f"[{idx}/{len(product_ids)}] Stock payload prepared with {len(new_stock)} fields")
+        else:
+            logger.warning(f"[{idx}/{len(product_ids)}] No stock data found in source product")
+        
+        # Copy translations (pl_PL)
+        logger.info(f"[{idx}/{len(product_ids)}] Copying translations...")
+        source_translations = dot_get(source_product, 'translations')
+        if isinstance(source_translations, dict):
+            new_translations = {}
+            for locale, trans_data in source_translations.items():
+                if not isinstance(trans_data, dict):
+                    continue
+                new_trans = {}
+                for field in translation_copyable_fields:
+                    value = trans_data.get(field)
+                    if value is not None:
+                        new_trans[field] = value
+                        if locale == 'pl_PL':
+                            logger.info(f"[{idx}/{len(product_ids)}] Copied translations.{locale}.{field}: {value}")
+                if new_trans:
+                    new_translations[locale] = new_trans
+            
+            if new_translations:
+                new_product_payload['translations'] = new_translations
+                logger.info(f"[{idx}/{len(product_ids)}] Translations payload prepared for {len(new_translations)} locales")
+        else:
+            logger.warning(f"[{idx}/{len(product_ids)}] No translations found in source product")
+        
+        # Auto-fill missing required fields with defaults
+        logger.info(f"[{idx}/{len(product_ids)}] Auto-filling missing required fields...")
+        
+        # Auto-fill pkwiu if missing (required by Shoper API)
+        if not new_product_payload.get('pkwiu'):
+            # Try common default PKWiU codes for products
+            default_pkwiu = '00.00.00.0'  # Generic product code
+            new_product_payload['pkwiu'] = default_pkwiu
+            logger.warning(f"[{idx}/{len(product_ids)}] Missing pkwiu, using default: {default_pkwiu}")
+        
+        # Auto-fill code if missing (use source product_id as fallback)
+        if not new_product_payload.get('code'):
+            fallback_code = f"COPY-{product_id}"
+            new_product_payload['code'] = fallback_code
+            logger.warning(f"[{idx}/{len(product_ids)}] Missing code, using fallback: {fallback_code}")
+        
+        # Ensure category_id exists
+        if not new_product_payload.get('category_id'):
+            # Try to get default category from target shop or use 1
+            default_category = 1
+            new_product_payload['category_id'] = default_category
+            logger.warning(f"[{idx}/{len(product_ids)}] Missing category_id, using default: {default_category}")
+        
+        # Validate required fields after auto-fill
+        logger.info(f"[{idx}/{len(product_ids)}] Validating required fields...")
+        validation_errors = []
+        
+        if not new_product_payload.get('category_id'):
+            validation_errors.append('category_id')
+        if not new_product_payload.get('code'):
+            validation_errors.append('code')
+        if not new_product_payload.get('pkwiu'):
+            validation_errors.append('pkwiu')
+        
+        stock_price = dot_get(new_product_payload, 'stock.price')
+        try:
+            price_val = float(stock_price) if stock_price else 0
+        except (TypeError, ValueError):
+            price_val = 0
+        if price_val <= 0:
+            validation_errors.append('stock.price')
+        
+        pl_name = dot_get(new_product_payload, 'translations.pl_PL.name')
+        if not pl_name:
+            validation_errors.append('translations.pl_PL.name')
+        
+        if validation_errors:
+            error_msg = f"Brak wymaganych pól: {', '.join(validation_errors)}"
+            logger.error(f"[{idx}/{len(product_ids)}] Validation failed after auto-fill: {error_msg}")
+            failed += 1
+            results.append({
+                'product_id': product_id,
+                'product_name': product_name,
+                'ok': False,
+                'error': error_msg
+            })
+            continue
+        
+        logger.info(f"[{idx}/{len(product_ids)}] Validation passed")
+        logger.info(f"[{idx}/{len(product_ids)}] Final payload keys: {list(new_product_payload.keys())}")
+        logger.info(f"[{idx}/{len(product_ids)}] Final payload (first 1000 chars): {str(new_product_payload)[:1000]}...")
+        
+        # Create product in target shop
+        logger.info(f"[{idx}/{len(product_ids)}] Creating product in target shop {target_shop.name}...")
+        try:
+            ok, msg, new_id = create_product(
+                target_shop.base_url,
+                target_shop.bearer_token,
+                new_product_payload
+            )
+            
+            logger.info(f"[{idx}/{len(product_ids)}] Create result: ok={ok}, msg={msg}, new_id={new_id}")
+            
+            if ok:
+                copied += 1
+                logger.info(f"[{idx}/{len(product_ids)}] ✓ Successfully copied product {product_id} -> new ID: {new_id}")
+                results.append({
+                    'source_product_id': product_id,
+                    'product_name': product_name,
+                    'new_product_id': new_id,
+                    'ok': True,
+                    'message': f'Skopiowano jako #{new_id}'
+                })
+            else:
+                failed += 1
+                logger.error(f"[{idx}/{len(product_ids)}] ✗ Failed to create product: {msg}")
+                results.append({
+                    'product_id': product_id,
+                    'product_name': product_name,
+                    'ok': False,
+                    'error': msg
+                })
+        except Exception as e:
+            logger.exception(f"[{idx}/{len(product_ids)}] Exception during product creation: {e}")
+            failed += 1
+            results.append({
+                'product_id': product_id,
+                'product_name': product_name,
+                'ok': False,
+                'error': f'Wyjątek podczas tworzenia: {str(e)}'
+            })
+    
+    logger.info(f"=== Copy operation completed: copied={copied}, failed={failed} ===")
+    logger.info(f"Target shop: {target_shop.name}, Total products processed: {len(product_ids)}")
+    
+    return JsonResponse({
+        'ok': True,
+        'copied': copied,
+        'failed': failed,
+        'target_shop_name': target_shop.name,
+        'results': results
+    })

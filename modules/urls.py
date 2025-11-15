@@ -9,6 +9,7 @@ from .views import (
     product_create_json,
     products_bulk_update_json,
     products_bulk_delete_json,
+    products_copy_to_shop_json,
     product_edit,
     product_edit_json,
     product_redirect_json,
@@ -30,6 +31,7 @@ urlpatterns = [
     path('<int:pk>/products/create.json', product_create_json, name='product_create_json'),
     path('<int:pk>/products/bulk_update.json', products_bulk_update_json, name='products_bulk_update_json'),
     path('<int:pk>/products/bulk_delete.json', products_bulk_delete_json, name='products_bulk_delete_json'),
+    path('<int:pk>/products/copy_to_shop.json', products_copy_to_shop_json, name='products_copy_to_shop_json'),
     # Product editing (only for products modules)
     path('<int:pk>/products/<int:item_id>/edit/', product_edit, name='product_edit'),
     path('<int:pk>/products/<int:item_id>/edit.json', product_edit_json, name='product_edit_json'),
